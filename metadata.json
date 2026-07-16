@@ -1,0 +1,6 @@
+{
+  "name": "内職報酬計算・管理システム",
+  "description": "内職担当者の報酬計算、月ごとの支払い管理、明細書の自動発行、進捗状況の可視化、およびCSVエクスポートを行うシステムです。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
