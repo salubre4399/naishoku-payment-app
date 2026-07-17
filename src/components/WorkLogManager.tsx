@@ -65,6 +65,7 @@ export default function WorkLogManager({
   const [notes, setNotes] = useState('');
 
   const [filterCompatibleOnly, setFilterCompatibleOnly] = useState(true);
+  const [selectedDept, setSelectedDept] = useState<string>(''); // 大カテゴリー（依頼先の部署）
 
   // Dropdowns lists (only active ones for new logging, but keep inactive if editing an old log)
   const activeWorkers = workers.filter(w => w.isActive || (editingLog && editingLog.workerId === w.id));
@@ -81,8 +82,17 @@ export default function WorkLogManager({
     return true;
   });
 
-  // Group displayed jobs by category for optgroup rendering
-  const jobsByCategory = displayedJobs.reduce((acc, job) => {
+  // 大カテゴリー（依頼先の部署）で絞り込む
+  const deptOf = (j?: Job | null) => (j?.department?.trim()) || '部署未設定';
+  const departments = Array.from(new Set(displayedJobs.map((j) => deptOf(j))));
+  const selectedJobObj = jobs.find((j) => j.id === jobId);
+  const effectiveDept = departments.includes(selectedDept)
+    ? selectedDept
+    : (departments.includes(deptOf(selectedJobObj)) ? deptOf(selectedJobObj) : (departments[0] || ''));
+  const deptJobs = displayedJobs.filter((j) => deptOf(j) === effectiveDept);
+
+  // Group department-filtered jobs by category for optgroup rendering
+  const jobsByCategory = deptJobs.reduce((acc, job) => {
     const catName = job.category?.trim() || '未分類';
     if (!acc[catName]) acc[catName] = [];
     acc[catName].push(job);
@@ -113,6 +123,7 @@ export default function WorkLogManager({
     setAutoHandover(false);
     setQuantity(0);
     setNotes('');
+    setSelectedDept('');
     setEditingLog(null);
     setIsFormOpen(false);
   };
@@ -933,6 +944,7 @@ export default function WorkLogManager({
                           setFilterCompatibleOnly(false);
                         }
                         setJobId(defaultJobId);
+                        setSelectedDept('');
                       }}
                       disabled={activeWorkerId !== 'all'}
                       className="disabled:opacity-75 disabled:bg-slate-100 w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-bold cursor-pointer"
@@ -944,9 +956,33 @@ export default function WorkLogManager({
                     </select>
                   </div>
 
+                  {/* 大カテゴリー（依頼先の部署）Select */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">大カテゴリー（依頼先の部署・場所） <span className="text-red-500">*</span></label>
+                    <select
+                      value={effectiveDept}
+                      onChange={(e) => {
+                        const dept = e.target.value;
+                        setSelectedDept(dept);
+                        const firstJob = displayedJobs.find((j) => deptOf(j) === dept);
+                        if (firstJob) setJobId(firstJob.id);
+                      }}
+                      className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-bold cursor-pointer"
+                      id="form-dept-select"
+                    >
+                      {departments.length === 0 ? (
+                        <option value="">(作業マスタがありません)</option>
+                      ) : (
+                        departments.map((d) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
                   {/* Job Select */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">作業項目 (内職マスタ) <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">作業内容（作業項目） <span className="text-red-500">*</span></label>
                     <select
                       required
                       value={jobId}

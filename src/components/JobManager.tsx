@@ -24,12 +24,18 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob }: JobManagerPr
   const [name, setName] = useState('');
   const [priceInput, setPriceInput] = useState<string>('');
   const [description, setDescription] = useState('');
+  const [department, setDepartment] = useState('');
   const [category, setCategory] = useState('');
   const [isActive, setIsActive] = useState(true);
 
   // Extract unique categories for filtering and quick-select
   const existingCategories = Array.from(
     new Set(jobs.map((job) => job.category?.trim()).filter(Boolean))
+  ) as string[];
+
+  // 大カテゴリー（部署）の既存一覧（クイック選択用）
+  const existingDepartments = Array.from(
+    new Set(jobs.map((job) => job.department?.trim()).filter(Boolean))
   ) as string[];
 
   // Filter jobs based on search term and category
@@ -49,6 +55,7 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob }: JobManagerPr
     setName('');
     setPriceInput('');
     setDescription('');
+    setDepartment('');
     setCategory('');
     setIsActive(true);
     setEditingJob(null);
@@ -65,6 +72,7 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob }: JobManagerPr
     setName(job.name);
     setPriceInput(String(job.unitPrice));
     setDescription(job.description);
+    setDepartment(job.department || '');
     setCategory(job.category || '');
     setIsActive(job.isActive);
     setIsFormOpen(true);
@@ -80,6 +88,7 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob }: JobManagerPr
       name,
       unitPrice: parsedPrice,
       description,
+      department: department.trim() || undefined,
       category: category.trim() || undefined,
       isActive,
     };
@@ -172,6 +181,11 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob }: JobManagerPr
                     <Hammer className="w-4 h-4 text-indigo-500" />
                   </div>
                   <div>
+                    {job.department && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-800 text-white rounded-lg text-[9px] font-black mb-1.5 mr-1">
+                        {job.department}
+                      </span>
+                    )}
                     {job.category && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg text-[9px] font-bold mb-1.5">
                         <Tag className="w-2.5 h-2.5 shrink-0" />
@@ -256,7 +270,38 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob }: JobManagerPr
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">グループ分け・カテゴリ名</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
+                    大カテゴリー（依頼先の部署・場所） <span className="text-slate-400 font-medium">例) 事務所、製造ライン</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="例) 事務所、製造ライン、検品課 など"
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    id="job-department-input"
+                  />
+                  {existingDepartments.length > 0 && (
+                    <div className="mt-2">
+                      <span className="text-[10px] font-bold text-slate-400 block mb-1">既存の大カテゴリーから選択:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {existingDepartments.map((dep) => (
+                          <button
+                            key={dep}
+                            type="button"
+                            onClick={() => setDepartment(dep)}
+                            className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-650 rounded-md text-[9px] font-bold transition-all cursor-pointer border border-slate-200/50"
+                          >
+                            {dep}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">作業グループ（中カテゴリー）</label>
                   <input
                     type="text"
                     placeholder="例) 梱包作業、シール貼り、組み立てなど"

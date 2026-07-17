@@ -54,6 +54,81 @@ import { Mail, Plus, X, CloudUpload, ExternalLink } from 'lucide-react';
 const OAUTH_TESTUSERS_URL =
   'https://console.cloud.google.com/apis/credentials/consent?project=gen-lang-client-0874086404';
 
+// 設定項目の日本語ラベル（反映確認ポップアップ用）
+const SETTING_LABELS: Partial<Record<keyof AppSettings, string>> = {
+  appName: 'アプリ名',
+  appLogo: 'ロゴアイコン',
+  customLogoUrl: 'カスタムロゴ画像',
+  accentColor: 'テーマカラー',
+  workerLimit: '内職者の登録上限',
+  hiddenTabs: '非表示タブ',
+  companyStampUrl: '会社印画像',
+  showCompanyStampOnPrint: '明細への会社印表示',
+  securityDomainLock: 'ドメインロック',
+  securityBlockRightClick: '右クリック/コピー禁止',
+  securityBlockDevTools: '開発者ツール禁止',
+  securityEncryptBackup: 'バックアップ暗号化',
+  securityBackupPassword: 'セキュリティ復元パスワード',
+};
+
+const TAB_NAMES: Record<string, string> = {
+  dashboard: 'ダッシュボード',
+  workers: '内職担当者',
+  jobs: '作業マスタ',
+  logs: '作業・進捗管理',
+  payments: '支払い・明細発行',
+  bulletin: 'お知らせ・連絡事項',
+  'contractor-settings': '設定',
+  developer: 'developer',
+};
+
+// 設定値を人が読める文字列に整形（反映確認ポップアップ用）
+const formatSettingValue = (key: keyof AppSettings, val: unknown): string => {
+  if (val === undefined || val === null || val === '') return '（なし）';
+  if (typeof val === 'boolean') return val ? 'ON（有効）' : 'OFF（無効）';
+  if (key === 'customLogoUrl' || key === 'companyStampUrl') return '画像あり';
+  if (key === 'securityBackupPassword') return '設定あり';
+  if (key === 'workerLimit') return val === 99999 ? '無制限' : `${val}名`;
+  if (key === 'hiddenTabs' && Array.isArray(val)) {
+    return val.length ? val.map((t) => TAB_NAMES[t] || t).join('、') : '（なし）';
+  }
+  return String(val);
+};
+
+type SettingsDiffRow = { label: string; before: string; after: string };
+
+// 変更前後の差分を算出（tabCustomizations はタブ単位に展開）
+const computeSettingsDiff = (before: AppSettings, after: AppSettings): SettingsDiffRow[] => {
+  const rows: SettingsDiffRow[] = [];
+  const keys: (keyof AppSettings)[] = [
+    'appName', 'appLogo', 'accentColor', 'workerLimit', 'customLogoUrl', 'companyStampUrl',
+    'showCompanyStampOnPrint', 'hiddenTabs', 'securityDomainLock', 'securityBlockRightClick',
+    'securityBlockDevTools', 'securityEncryptBackup', 'securityBackupPassword',
+  ];
+  for (const k of keys) {
+    if (JSON.stringify(before[k]) !== JSON.stringify(after[k])) {
+      rows.push({
+        label: SETTING_LABELS[k] || String(k),
+        before: formatSettingValue(k, before[k]),
+        after: formatSettingValue(k, after[k]),
+      });
+    }
+  }
+  const bc = before.tabCustomizations || {};
+  const ac = after.tabCustomizations || {};
+  const tabIds = Array.from(new Set([...Object.keys(bc), ...Object.keys(ac)]));
+  for (const id of tabIds) {
+    if (JSON.stringify(bc[id]) !== JSON.stringify(ac[id])) {
+      rows.push({
+        label: `タブ表示「${TAB_NAMES[id] || id}」`,
+        before: bc[id]?.name ?? '（既定）',
+        after: ac[id]?.name ?? '（既定）',
+      });
+    }
+  }
+  return rows;
+};
+
 interface DeveloperManagerProps {
   onSettingsChange?: () => void; // Notify main layout to dynamically update logos, names, active tabs
   currentEmail?: string | null;  // ログイン中の開発者メール
@@ -109,14 +184,13 @@ export default function DeveloperManager({
     return s.workerLimit;
   });
 
+  // 設定は「下書き(settings)」→「反映」方式。appliedSettings が現在適用中の基準。
+  const [appliedSettings, setAppliedSettings] = useState<AppSettings>(() => loadSettings());
+  const [showApplyModal, setShowApplyModal] = useState(false);
+
   const updateSettingField = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
-    const updated = { ...settings, [key]: value };
-    setSettings(updated);
-    saveSettings(updated);
-    if (onSettingsChange) {
-      onSettingsChange();
-    }
-    triggerNotification('success', 'アプリ設定を更新・保存しました。');
+    // 下書きのみ更新。実際の保存・反映は「設定を反映」ボタン押下時に行う。
+    setSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,7 +207,7 @@ export default function DeveloperManager({
       const base64String = event.target?.result as string;
       if (base64String) {
         updateSettingField('customLogoUrl', base64String);
-        triggerNotification('success', 'カスタムロゴ画像をアップロードして適用しました！');
+        triggerNotification('success', 'カスタムロゴ画像を追加しました。「設定を反映」で確定してください。');
       }
     };
     reader.onerror = () => {
@@ -143,14 +217,11 @@ export default function DeveloperManager({
   };
 
   const handleRemoveCustomLogo = () => {
-    const updated = { ...settings };
-    delete updated.customLogoUrl;
-    setSettings(updated);
-    saveSettings(updated);
-    if (onSettingsChange) {
-      onSettingsChange();
-    }
-    triggerNotification('success', 'カスタムロゴ画像を削除し、デフォルトのアイコン表示に戻しました。');
+    setSettings((prev) => {
+      const updated = { ...prev };
+      delete updated.customLogoUrl;
+      return updated;
+    });
   };
 
   const handleCompanyStampUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,7 +238,7 @@ export default function DeveloperManager({
       const base64String = event.target?.result as string;
       if (base64String) {
         updateSettingField('companyStampUrl', base64String);
-        triggerNotification('success', '会社印画像をアップロードして適用しました！');
+        triggerNotification('success', '会社印画像を追加しました。「設定を反映」で確定してください。');
       }
     };
     reader.onerror = () => {
@@ -177,14 +248,11 @@ export default function DeveloperManager({
   };
 
   const handleRemoveCompanyStamp = () => {
-    const updated = { ...settings };
-    delete updated.companyStampUrl;
-    setSettings(updated);
-    saveSettings(updated);
-    if (onSettingsChange) {
-      onSettingsChange();
-    }
-    triggerNotification('success', '会社印画像を削除しました。');
+    setSettings((prev) => {
+      const updated = { ...prev };
+      delete updated.companyStampUrl;
+      return updated;
+    });
   };
 
   const handleToggleTab = (tabId: string) => {
@@ -204,18 +272,36 @@ export default function DeveloperManager({
   };
 
   const handleUpdateTabCustomization = (tabId: string, name: string, icon: string) => {
-    const currentCustomizations = settings.tabCustomizations || {};
-    const updatedCustomizations = {
-      ...currentCustomizations,
-      [tabId]: { name, icon }
-    };
-    const updated = { ...settings, tabCustomizations: updatedCustomizations };
-    setSettings(updated);
-    saveSettings(updated);
+    setSettings((prev) => ({
+      ...prev,
+      tabCustomizations: { ...(prev.tabCustomizations || {}), [tabId]: { name, icon } },
+    }));
+  };
+
+  // --- 設定の反映（下書き→確認→保存） ---
+  const handleOpenApply = () => {
+    if (computeSettingsDiff(appliedSettings, settings).length === 0) {
+      triggerNotification('error', '変更はありません。');
+      return;
+    }
+    setShowApplyModal(true);
+  };
+
+  const handleConfirmApply = () => {
+    saveSettings(settings);
+    setAppliedSettings(settings);
     if (onSettingsChange) {
       onSettingsChange();
     }
-    triggerNotification('success', 'タブのカスタム名称・アイコン設定を更新しました。');
+    setShowApplyModal(false);
+    triggerNotification('success', '設定を反映しました。');
+  };
+
+  const handleDiscardChanges = () => {
+    setSettings(appliedSettings);
+    setLimitInputType([5, 10, 25, 100, 99999].includes(appliedSettings.workerLimit) ? 'fixed' : 'custom');
+    setCustomLimit(appliedSettings.workerLimit);
+    triggerNotification('success', '未反映の変更を破棄しました。');
   };
 
   const handleSaveBulletinText = (e: React.FormEvent) => {
@@ -392,7 +478,9 @@ export default function DeveloperManager({
 
         if (parsed.settings) {
           saveSettings(parsed.settings);
-          setSettings(loadSettings());
+          const restored = loadSettings();
+          setSettings(restored);
+          setAppliedSettings(restored);
           onSettingsChange?.();
         }
         if (typeof parsed.bulletin === 'string') {
@@ -424,6 +512,9 @@ export default function DeveloperManager({
     }
     setShowResetConfirm(false);
   };
+
+  const settingsDiff = computeSettingsDiff(appliedSettings, settings);
+  const isDirty = settingsDiff.length > 0;
 
   return (
     <div className="space-y-6" id="developer-dashboard">
@@ -1279,6 +1370,99 @@ export default function DeveloperManager({
         </div>
 
       </div>
+
+      {/* 未反映の変更バー（画面下部に固定） */}
+      {isDirty && (
+        <div className="fixed bottom-4 inset-x-0 z-40 flex justify-center px-4 print:hidden">
+          <div className="w-full max-w-2xl bg-white border border-indigo-200 shadow-2xl rounded-2xl p-3.5 flex items-center justify-between gap-3 animate-in slide-in-from-bottom-4 duration-200">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-black text-slate-800">未反映の設定変更が {settingsDiff.length} 件あります</p>
+                <p className="text-[10px] text-slate-400 font-medium truncate">「設定を反映」で内容を確認してから適用されます（自動保存はされません）</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleDiscardChanges}
+                className="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl cursor-pointer"
+                id="btn-discard-settings"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                破棄
+              </button>
+              <button
+                onClick={handleOpenApply}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer"
+                id="btn-apply-settings"
+              >
+                <CheckCircle className="w-4 h-4" />
+                設定を反映
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 反映確認モーダル（変更前 → 変更後） */}
+      {showApplyModal && (
+        <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
+          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+            <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/70 flex justify-between items-center">
+              <div>
+                <span className="text-[9px] bg-indigo-100 text-indigo-800 px-2.5 py-0.5 rounded-md font-bold uppercase tracking-wider">
+                  設定の反映確認
+                </span>
+                <h3 className="text-base font-black text-slate-800 mt-1">この内容で設定を反映しますか？</h3>
+              </div>
+              <button
+                onClick={() => setShowApplyModal(false)}
+                className="p-1.5 hover:bg-slate-200/50 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-2.5">
+              <p className="text-[11px] text-slate-500 font-semibold">
+                以下の <strong className="text-slate-700">{settingsDiff.length}</strong> 件が変更されます。内容を確認してください（<span className="text-rose-600 font-bold">赤=変更前</span> / <span className="text-emerald-600 font-bold">緑=変更後</span>）。
+              </p>
+              {settingsDiff.map((row, idx) => (
+                <div key={idx} className="p-3 rounded-2xl border border-slate-150 bg-slate-50/60">
+                  <div className="text-[11px] font-black text-slate-700 mb-1.5">{row.label}</div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="flex-1 px-2.5 py-1.5 rounded-lg bg-rose-50 border border-rose-100 text-rose-700 font-mono font-bold break-all">
+                      {row.before}
+                    </span>
+                    <span className="text-slate-400 font-black shrink-0">→</span>
+                    <span className="flex-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700 font-mono font-bold break-all">
+                      {row.after}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 flex gap-3 font-bold text-xs bg-white">
+              <button
+                onClick={() => setShowApplyModal(false)}
+                className="flex-1 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl cursor-pointer text-center"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleConfirmApply}
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer text-center font-black"
+                id="btn-confirm-apply-settings"
+              >
+                反映して保存する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

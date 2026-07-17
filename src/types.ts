@@ -25,7 +25,8 @@ export interface Job {
   description: string;
   isActive: boolean;
   createdAt: string;
-  category?: string;
+  department?: string; // 大カテゴリー（依頼先の部署・場所。例: 事務所、製造ライン）
+  category?: string;   // 中カテゴリー（作業のグループ分け）
 }
 
 export type WorkStatus = 'unstarted' | 'ongoing' | 'completed';
