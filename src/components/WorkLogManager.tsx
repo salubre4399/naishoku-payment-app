@@ -160,6 +160,23 @@ export default function WorkLogManager({
     setIsFormOpen(true);
   };
 
+  // 依頼済みの作業内容を修正するためにフォームを編集モードで開く
+  const handleOpenEditRequest = (log: WorkLog) => {
+    resetForm();
+    setEditingLog(log);
+    setWorkerId(log.workerId);
+    setJobId(log.jobId);
+    setRequestDate(log.requestDate || log.date);
+    setDueDate(log.dueDate || log.date);
+    setQuantity(log.quantity);
+    setNotes(log.notes || '');
+    setAutoHandover(!!log.handedOverDate);
+    setHandedOverDate(log.handedOverDate || new Date().toISOString().substring(0, 10));
+    const w = workers.find((x) => x.id === log.workerId);
+    setFilterCompatibleOnly(!!(w && w.allowedJobIds && w.allowedJobIds.length > 0));
+    setIsFormOpen(true);
+  };
+
   // Submission for new request (Quantity + Delivery Date only!)
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,7 +188,7 @@ export default function WorkLogManager({
       date: autoHandover ? dueDate : requestDate, // For completed logs, date will group under delivery, initially under request/due
       requestDate,
       handedOverDate: autoHandover ? handedOverDate : undefined,
-      dueDate: autoHandover ? dueDate : undefined,
+      dueDate, // 入力された納品予定日は常に保持する（未受取でも破棄しない）
       quantity,
       ngQuantity: 0, // No NG during initial creation request
       status: (autoHandover ? 'ongoing' : 'unstarted') as WorkStatus,
@@ -337,7 +354,7 @@ export default function WorkLogManager({
         String(log.quantity),
         String(ok),
         String(ng),
-        `${ok * unitPrice}円`,
+        `${Math.round(ok * unitPrice * 100) / 100}円`,
         '完了',
         payStatus,
         log.notes
@@ -612,15 +629,35 @@ export default function WorkLogManager({
                       <span className="text-slate-900 font-extrabold font-mono text-xs">{formatYen(expectedPayout)}</span>
                     </div>
                     
-                    {/* Primary Popup Trigger Button */}
-                    <button
-                      onClick={() => handleOpenStatusUpdate(log)}
-                      className="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] py-1.5 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
-                      id={`btn-update-ongoing-${log.id}`}
-                    >
-                      <Activity className="w-3.5 h-3.5 text-indigo-100" />
-                      {log.status === 'unstarted' ? '商品を渡す (受取登録)' : '納品・検品を登録する'}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {/* 依頼内容の修正 */}
+                      <button
+                        onClick={() => handleOpenEditRequest(log)}
+                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                        title="依頼内容を修正する"
+                        id={`btn-edit-ongoing-${log.id}`}
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      {/* 依頼の削除（間違えたとき用） */}
+                      <button
+                        onClick={() => onDeleteWorkLog(log.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                        title="この依頼を削除する"
+                        id={`btn-delete-ongoing-${log.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      {/* Primary Popup Trigger Button */}
+                      <button
+                        onClick={() => handleOpenStatusUpdate(log)}
+                        className="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] py-1.5 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
+                        id={`btn-update-ongoing-${log.id}`}
+                      >
+                        <Activity className="w-3.5 h-3.5 text-indigo-100" />
+                        {log.status === 'unstarted' ? '商品を渡す (受取登録)' : '納品・検品を登録する'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -858,7 +895,7 @@ export default function WorkLogManager({
               <div className="flex justify-between items-center pb-4 border-b border-slate-100 mb-6">
                 <h3 className="text-base font-black text-slate-800 flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-indigo-500" />
-                  新規の作業依頼（ステップ①）
+                  {editingLog ? '作業依頼の内容を修正' : '新規の作業依頼（ステップ①）'}
                 </h3>
                 <button
                   onClick={resetForm}
@@ -1073,7 +1110,7 @@ export default function WorkLogManager({
                       type="submit"
                       className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer text-center"
                     >
-                      依頼を送信する
+                      {editingLog ? '依頼内容を保存する' : '依頼を送信する'}
                     </button>
                   </div>
                 </form>

@@ -114,7 +114,14 @@ export const savePayments = (payments: MonthlyPayment[]) => {
 
 // Formatters
 export const formatYen = (num: number): string => {
-  return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(num);
+  // 単価に小数（例: 1.25円）を許容するため、小数第2位まで表示できるようにする。
+  // 整数の場合は小数を出さない（例: ￥1,000）。
+  return new Intl.NumberFormat('ja-JP', {
+    style: 'currency',
+    currency: 'JPY',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(num);
 };
 
 export const formatDateJP = (dateStr: string): string => {

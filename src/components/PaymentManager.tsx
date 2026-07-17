@@ -142,11 +142,12 @@ export default function PaymentManager({
     const totalNgQuantity = completedLogs.reduce((sum, log) => sum + (log.ngQuantity || 0), 0);
     const totalOkQuantity = totalQuantity - totalNgQuantity;
 
-    const calculatedPay = completedLogs.reduce((sum, log) => {
+    // 月集計（担当者ごとの当月報酬合計）は小数点以下を切り捨て
+    const calculatedPay = Math.floor(completedLogs.reduce((sum, log) => {
       const job = jobs.find(j => j.id === log.jobId);
       const ok = log.quantity - (log.ngQuantity || 0);
       return sum + (job ? ok * job.unitPrice : 0);
-    }, 0);
+    }, 0));
 
     // Calculate feeAmount and netPay
     let feeAmount = 0;

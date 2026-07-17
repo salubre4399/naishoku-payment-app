@@ -5,17 +5,18 @@
 
 import React, { useState } from 'react';
 import { Worker, Job } from '../types';
-import { UserPlus, Edit2, Search, Check, X, Phone, Mail, Landmark, AlertTriangle, Hammer, Tag } from 'lucide-react';
+import { UserPlus, Edit2, Trash2, Search, Check, X, Phone, Mail, Landmark, AlertTriangle, Hammer, Tag } from 'lucide-react';
 
 interface WorkerManagerProps {
   workers: Worker[];
   jobs: Job[];
   onAddWorker: (worker: Omit<Worker, 'id' | 'createdAt'>) => void;
   onUpdateWorker: (worker: Worker) => void;
+  onDeleteWorker: (worker: Worker) => void;
   workerLimit: number;
 }
 
-export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWorker, workerLimit }: WorkerManagerProps) {
+export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWorker, onDeleteWorker, workerLimit }: WorkerManagerProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
@@ -150,14 +151,24 @@ export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWork
                     {worker.isActive ? '稼働中' : '休止中'}
                   </span>
                 </div>
-                <button
-                  onClick={() => handleOpenEdit(worker)}
-                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-xl border border-slate-200 transition-colors cursor-pointer"
-                  title="編集する"
-                  id={`btn-edit-worker-${worker.id}`}
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => handleOpenEdit(worker)}
+                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-xl border border-slate-200 transition-colors cursor-pointer"
+                    title="編集する"
+                    id={`btn-edit-worker-${worker.id}`}
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onDeleteWorker(worker)}
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-slate-50 rounded-xl border border-slate-200 transition-colors cursor-pointer"
+                    title="この担当者を一覧から削除する"
+                    id={`btn-delete-worker-${worker.id}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               {/* Details List */}

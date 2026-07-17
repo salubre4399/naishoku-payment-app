@@ -135,7 +135,8 @@ export default function StatementModal({
   });
 
   const lineItems = Object.values(summaryMap);
-  const totalAmount = lineItems.reduce((sum, item) => sum + (item.okQuantity * item.unitPrice), 0);
+  // 月集計の合計は小数点以下を切り捨て（明細の支払合計＝支払管理と一致させる）
+  const totalAmount = Math.floor(lineItems.reduce((sum, item) => sum + (item.okQuantity * item.unitPrice), 0));
 
   let feeAmount = 0;
   if (totalAmount > 0) {

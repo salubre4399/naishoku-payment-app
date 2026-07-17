@@ -38,7 +38,8 @@ export default function Dashboard({ workers, jobs, workLogs, onNavigate }: Dashb
   const totalQuantity = monthlyLogs.reduce((sum, log) => sum + (log.quantity - (log.ngQuantity || 0)), 0);
 
   // Total earnings / payout in selected month (unpaid, approved, or paid)
-  const totalPayout = monthlyLogs.reduce((sum, log) => {
+  // 月集計は小数点以下を切り捨て（支払管理・明細と一致させる）
+  const totalPayout = Math.floor(monthlyLogs.reduce((sum, log) => {
     const job = jobs.find(j => j.id === log.jobId);
     if (!job) return sum;
     // Only calculate amount for work actually progressed (completed)
@@ -47,7 +48,7 @@ export default function Dashboard({ workers, jobs, workLogs, onNavigate }: Dashb
       return sum + (okQty * job.unitPrice);
     }
     return sum;
-  }, 0);
+  }, 0));
 
   // Status breakdown
   const statusCounts = {
@@ -69,14 +70,14 @@ export default function Dashboard({ workers, jobs, workLogs, onNavigate }: Dashb
     const completedPieces = workerLogs
       .filter(l => l.status === 'completed')
       .reduce((sum, l) => sum + (l.quantity - (l.ngQuantity || 0)), 0);
-    const earnings = workerLogs.reduce((sum, log) => {
+    const earnings = Math.floor(workerLogs.reduce((sum, log) => {
       if (log.status === 'completed') {
         const job = jobs.find(j => j.id === log.jobId);
         const okQty = log.quantity - (log.ngQuantity || 0);
         return sum + (job ? okQty * job.unitPrice : 0);
       }
       return sum;
-    }, 0);
+    }, 0));
 
     return {
       name: worker.name,

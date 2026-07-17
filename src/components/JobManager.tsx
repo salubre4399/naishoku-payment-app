@@ -22,7 +22,7 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob }: JobManagerPr
 
   // Form states
   const [name, setName] = useState('');
-  const [unitPrice, setUnitPrice] = useState<number>(0);
+  const [priceInput, setPriceInput] = useState<string>('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [isActive, setIsActive] = useState(true);
@@ -47,7 +47,7 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob }: JobManagerPr
 
   const resetForm = () => {
     setName('');
-    setUnitPrice(0);
+    setPriceInput('');
     setDescription('');
     setCategory('');
     setIsActive(true);
@@ -63,7 +63,7 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob }: JobManagerPr
   const handleOpenEdit = (job: Job) => {
     setEditingJob(job);
     setName(job.name);
-    setUnitPrice(job.unitPrice);
+    setPriceInput(String(job.unitPrice));
     setDescription(job.description);
     setCategory(job.category || '');
     setIsActive(job.isActive);
@@ -72,11 +72,13 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob }: JobManagerPr
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || unitPrice < 0) return;
+    // 単価は小数第2位まで許容（例: 1.25円）。入力を数値化し2桁に丸める。
+    const parsedPrice = Math.round((parseFloat(priceInput) || 0) * 100) / 100;
+    if (!name.trim() || parsedPrice < 0) return;
 
     const jobData = {
       name,
-      unitPrice,
+      unitPrice: parsedPrice,
       description,
       category: category.trim() || undefined,
       isActive,
@@ -285,16 +287,18 @@ export default function JobManager({ jobs, onAddJob, onUpdateJob }: JobManagerPr
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">
                     単価 (1個/1件あたり、円) <span className="text-red-500">*</span>
+                    <span className="ml-1 font-medium text-slate-400">小数第2位まで可（例: 1.25）</span>
                   </label>
                   <div className="relative">
                     <input
                       type="number"
+                      inputMode="decimal"
                       required
                       min={0}
-                      step={0.1}
-                      placeholder="例) 5"
-                      value={unitPrice || ''}
-                      onChange={(e) => setUnitPrice(parseFloat(e.target.value) || 0)}
+                      step={0.01}
+                      placeholder="例) 1.25"
+                      value={priceInput}
+                      onChange={(e) => setPriceInput(e.target.value)}
                       className="w-full pl-3 pr-8 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono font-bold"
                       id="job-unitprice-input"
                     />

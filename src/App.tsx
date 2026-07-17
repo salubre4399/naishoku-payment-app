@@ -296,6 +296,17 @@ export default function App() {
     upsertItem(COLLECTIONS.WORKERS, updatedWorker).catch(handleWriteError);
   };
 
+  const handleDeleteWorker = (worker: Worker) => {
+    const relatedLogs = workLogs.filter((l) => l.workerId === worker.id);
+    const warn =
+      relatedLogs.length > 0
+        ? `\n\n※この担当者には作業記録が ${relatedLogs.length} 件あります。削除しても記録自体は残りますが、履歴上は「削除済」と表示されます。`
+        : '';
+    if (confirm(`内職担当者「${worker.name}」を一覧から削除します。よろしいですか？${warn}`)) {
+      deleteItem(COLLECTIONS.WORKERS, worker.id).catch(handleWriteError);
+    }
+  };
+
   // --- Job Master Actions ---
   const handleAddJob = (newJob: Omit<Job, 'id' | 'createdAt'>) => {
     const job: Job = {
@@ -349,11 +360,12 @@ export default function App() {
     const associatedLogIds = associatedLogs.map(log => log.id);
 
     // Calculate total payout amount (Deducting NG items)
-    const totalAmount = associatedLogs.reduce((sum, log) => {
+    // 月集計の支払額は小数点以下を切り捨て（整数円）にする
+    const totalAmount = Math.floor(associatedLogs.reduce((sum, log) => {
       const job = jobs.find(j => j.id === log.jobId);
       const okQty = log.quantity - (log.ngQuantity || 0);
       return sum + (job ? okQty * job.unitPrice : 0);
-    }, 0);
+    }, 0));
 
     // Update or Create Payment entry
     const existingPaymentIdx = payments.findIndex(p => p.id === paymentId);
@@ -778,6 +790,7 @@ export default function App() {
                 jobs={jobs}
                 onAddWorker={handleAddWorker}
                 onUpdateWorker={handleUpdateWorker}
+                onDeleteWorker={handleDeleteWorker}
                 workerLimit={settings.workerLimit}
               />
             )}
