@@ -1,10 +1,7 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
+import { auth } from './firebase';
 
-// Initialize Firebase App
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+export { auth };
 
 const provider = new GoogleAuthProvider();
 // Add required Drive scopes

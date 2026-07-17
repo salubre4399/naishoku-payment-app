@@ -38,46 +38,57 @@ import {
   ClipboardList
 } from 'lucide-react';
 import { Worker, Job, WorkLog, MonthlyPayment, AppSettings } from '../types';
-import { 
-  loadWorkers, 
-  loadJobs, 
-  loadWorkLogs, 
+import {
+  loadWorkers,
+  loadJobs,
+  loadWorkLogs,
   loadPayments,
-  saveWorkers,
-  saveJobs,
-  saveWorkLogs,
-  savePayments,
   loadSettings,
   saveSettings
 } from '../utils';
+import { AccessConfig, saveAccessConfig } from '../lib/access';
+import { COLLECTIONS, deleteItem, migrateArraysToCloud } from '../lib/store';
+import { Mail, Plus, X, CloudUpload } from 'lucide-react';
 
 interface DeveloperManagerProps {
-  onDataReset: () => void; // Triggered when system data resets or gets imported
   onSettingsChange?: () => void; // Notify main layout to dynamically update logos, names, active tabs
-  onDevAuthChange?: (isAuthorized: boolean) => void;
+  currentEmail?: string | null;  // ログイン中の開発者メール
+  accessConfig?: AccessConfig | null; // 許可アカウント設定 (Firestore)
+  workers: Worker[];
+  jobs: Job[];
+  workLogs: WorkLog[];
+  payments: MonthlyPayment[];
 }
 
-export default function DeveloperManager({ onDataReset, onSettingsChange, onDevAuthChange }: DeveloperManagerProps) {
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [devUser, setDevUser] = useState('');
-  const [devPass, setDevPass] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [showDevPass, setShowDevPass] = useState(false);
+export default function DeveloperManager({
+  onSettingsChange,
+  currentEmail,
+  accessConfig,
+  workers,
+  jobs,
+  workLogs,
+  payments,
+}: DeveloperManagerProps) {
+  // 許可アカウント編集用ローカル状態（accessConfigに追従）
+  const [members, setMembers] = useState<string[]>(accessConfig?.members || []);
+  const [devEmail, setDevEmail] = useState<string>(accessConfig?.developerEmail || '');
+  const [newMember, setNewMember] = useState('');
+  useEffect(() => {
+    setMembers(accessConfig?.members || []);
+    setDevEmail(accessConfig?.developerEmail || '');
+  }, [accessConfig]);
 
-  // States for configuring credentials
-  const [mainId, setMainId] = useState('staff');
-  const [mainPass, setMainPass] = useState('password');
-  const [newDevId, setNewDevId] = useState('admin');
-  const [newDevPass, setNewDevPass] = useState('developer');
-
-  // Stats
-  const [stats, setStats] = useState({
-    workersCount: 0,
-    jobsCount: 0,
-    logsCount: 0,
-    paymentsCount: 0,
-    totalYen: 0
-  });
+  // 統計（Firestoreデータ = props から算出）
+  const stats = {
+    workersCount: workers.length,
+    jobsCount: jobs.length,
+    logsCount: workLogs.length,
+    paymentsCount: payments.length,
+    totalYen: workLogs.reduce((total, log) => {
+      const job = jobs.find((j) => j.id === log.jobId);
+      return total + (job ? log.quantity * job.unitPrice : 0);
+    }, 0),
+  };
 
   const [notification, setNotification] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -212,63 +223,57 @@ export default function DeveloperManager({ onDataReset, onSettingsChange, onDevA
     triggerNotification('success', 'お知らせタブの内容を更新しました。');
   };
 
-  useEffect(() => {
-    // Check session auth on mount
-    const auth = sessionStorage.getItem('homeworkers_app_dev_auth');
-    if (auth === 'true') {
-      setIsAuthorized(true);
+  // --- 許可アカウント管理 (Firestore config/access) ---
+  const handleAddMember = () => {
+    const email = newMember.trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      triggerNotification('error', '正しいメールアドレスを入力してください。');
+      return;
     }
-    loadConfigurations();
-    refreshStats();
-  }, []);
-
-  const loadConfigurations = () => {
-    // Load general credentials
-    const storedMain = localStorage.getItem('homeworkers_credentials_main');
-    if (storedMain) {
-      try {
-        const parsed = JSON.parse(storedMain);
-        if (parsed.username) setMainId(parsed.username);
-        if (parsed.password) setMainPass(parsed.password);
-      } catch (e) {
-        console.error(e);
-      }
+    if (members.map((m) => m.toLowerCase()).includes(email)) {
+      triggerNotification('error', 'そのアカウントは既に登録されています。');
+      return;
     }
+    setMembers([...members, email]);
+    setNewMember('');
+  };
 
-    // Load developer credentials
-    const storedDev = localStorage.getItem('homeworkers_credentials_dev');
-    if (storedDev) {
-      try {
-        const parsed = JSON.parse(storedDev);
-        if (parsed.username) setNewDevId(parsed.username);
-        if (parsed.password) setNewDevPass(parsed.password);
-      } catch (e) {
-        console.error(e);
-      }
+  const handleRemoveMember = (email: string) => {
+    setMembers(members.filter((m) => m !== email));
+  };
+
+  const handleSaveAccess = async () => {
+    if (!devEmail.trim().includes('@')) {
+      triggerNotification('error', '開発者メールアドレスが正しくありません。');
+      return;
+    }
+    try {
+      await saveAccessConfig({ members, developerEmail: devEmail.trim() });
+      triggerNotification('success', '許可アカウント設定を保存しました。');
+    } catch (e) {
+      console.error(e);
+      triggerNotification('error', '保存に失敗しました。この操作は開発者アカウントのみ実行できます。');
     }
   };
 
-  const refreshStats = () => {
-    const ws = loadWorkers();
-    const js = loadJobs();
-    const lgs = loadWorkLogs();
-    const pmts = loadPayments();
-
-    let total = 0;
-    lgs.forEach(log => {
-      const job = js.find(j => j.id === log.jobId);
-      if (job) {
-        total += log.quantity * job.unitPrice;
+  // --- 端末内(localStorage)の既存データをクラウドへ移行 ---
+  const handleMigrateLocal = async () => {
+    try {
+      const count = await migrateArraysToCloud({
+        workers: loadWorkers(),
+        jobs: loadJobs(),
+        workLogs: loadWorkLogs(),
+        payments: loadPayments(),
+      });
+      if (count === 0) {
+        triggerNotification('error', '移行対象の端末内データが見つかりませんでした。');
+      } else {
+        triggerNotification('success', `端末内の${count}件のデータをクラウドへ移行しました。`);
       }
-    });
-
-    setStats({
-      workersCount: ws.length,
-      jobsCount: js.length,
-      logsCount: lgs.length,
-      paymentsCount: pmts.length,
-      totalYen: total
-    });
+    } catch (e) {
+      console.error(e);
+      triggerNotification('error', 'クラウドへの移行に失敗しました。');
+    }
   };
 
   const triggerNotification = (type: 'success' | 'error', text: string) => {
@@ -276,73 +281,6 @@ export default function DeveloperManager({ onDataReset, onSettingsChange, onDevA
     setTimeout(() => {
       setNotification(null);
     }, 4000);
-  };
-
-  // Developer tab verification
-  const handleVerifyDev = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-
-    const storedDev = localStorage.getItem('homeworkers_credentials_dev');
-    let validDevUser = 'admin';
-    let validDevPass = 'developer';
-
-    if (storedDev) {
-      try {
-        const parsed = JSON.parse(storedDev);
-        if (parsed.username) validDevUser = parsed.username;
-        if (parsed.password) validDevPass = parsed.password;
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    if (devUser === validDevUser && devPass === validDevPass) {
-      sessionStorage.setItem('homeworkers_app_dev_auth', 'true');
-      setIsAuthorized(true);
-      if (onDevAuthChange) {
-        onDevAuthChange(true);
-      }
-      refreshStats();
-    } else {
-      setLoginError('開発者IDまたはパスワードが違います。');
-    }
-  };
-
-  const handleSaveMainCreds = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!mainId.trim() || !mainPass.trim()) {
-      triggerNotification('error', '一般IDとパスワードは空白にできません。');
-      return;
-    }
-    localStorage.setItem(
-      'homeworkers_credentials_main',
-      JSON.stringify({ username: mainId.trim(), password: mainPass.trim() })
-    );
-    triggerNotification('success', '一般起動ログイン情報を変更しました。');
-  };
-
-  const handleSaveDevCreds = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDevId.trim() || !newDevPass.trim()) {
-      triggerNotification('error', '開発者IDとパスワードは空白にできません。');
-      return;
-    }
-    localStorage.setItem(
-      'homeworkers_credentials_dev',
-      JSON.stringify({ username: newDevId.trim(), password: newDevPass.trim() })
-    );
-    triggerNotification('success', '開発者ログイン情報を変更しました。');
-  };
-
-  const handleDevLogout = () => {
-    sessionStorage.removeItem('homeworkers_app_dev_auth');
-    setIsAuthorized(false);
-    if (onDevAuthChange) {
-      onDevAuthChange(false);
-    }
-    setDevUser('');
-    setDevPass('');
   };
 
   // Simple encryption/decryption (obfuscation) helper to prevent easy copying/modifying
@@ -375,19 +313,20 @@ export default function DeveloperManager({ onDataReset, onSettingsChange, onDevA
     return decodeURIComponent(escape(atob(base64)));
   };
 
-  // JSON Export (Backup)
+  // JSON Export (Backup): クラウド上の現在データをファイル出力
   const handleExportBackup = () => {
-    const localStorageData: Record<string, string> = {};
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key) {
-        localStorageData[key] = localStorage.getItem(key) || '';
-      }
-    }
-
-    const jsonString = JSON.stringify(localStorageData, null, 2);
+    const payload = {
+      workers,
+      jobs,
+      workLogs,
+      payments,
+      settings: loadSettings(),
+      bulletin: localStorage.getItem('homeworkers_bulletin_text') || '',
+      exportedAt: new Date().toISOString(),
+    };
+    const jsonString = JSON.stringify(payload, null, 2);
     let outputContent = jsonString;
-    let fileName = `homeworkers_localstorage_backup_${new Date().toISOString().substring(0, 10)}.json`;
+    let fileName = `naishoku_backup_${new Date().toISOString().substring(0, 10)}.json`;
 
     if (settings.securityEncryptBackup) {
       const key = settings.securityBackupPassword || 'homeworkers-secure';
@@ -397,7 +336,7 @@ export default function DeveloperManager({ onDataReset, onSettingsChange, onDevA
         timestamp: new Date().toISOString(),
         author: 'Homeworkers Protection Engine'
       }, null, 2);
-      fileName = `homeworkers_SECURE_backup_${new Date().toISOString().substring(0, 10)}.enc.json`;
+      fileName = `naishoku_SECURE_backup_${new Date().toISOString().substring(0, 10)}.enc.json`;
     }
 
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(outputContent);
@@ -407,180 +346,80 @@ export default function DeveloperManager({ onDataReset, onSettingsChange, onDevA
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-    
-    if (settings.securityEncryptBackup) {
-      triggerNotification('success', '暗号化された安全なバックアップ（.enc.json）をエクスポートしました。');
-    } else {
-      triggerNotification('success', '現在のLocalStorageの全データをJSONファイルとしてエクスポートしました。');
-    }
+
+    triggerNotification('success', settings.securityEncryptBackup
+      ? '暗号化された安全なバックアップ（.enc.json）をエクスポートしました。'
+      : 'クラウド上の全データをJSONファイルとしてエクスポートしました。');
   };
 
-  // JSON Import (Restore)
+  // JSON Import (Restore): バックアップファイルからクラウドへ復元
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileReader = new FileReader();
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    fileReader.onload = (event) => {
+    fileReader.onload = async (event) => {
       try {
         const fileContent = event.target?.result as string;
         let parsed = JSON.parse(fileContent);
 
-        // Check if the backup is encrypted
+        // 暗号化バックアップの復号
         if (parsed && parsed.secured && parsed.payload) {
           const key = settings.securityBackupPassword || 'homeworkers-secure';
           try {
-            const decryptedString = decryptData(parsed.payload, key);
-            parsed = JSON.parse(decryptedString);
+            parsed = JSON.parse(decryptData(parsed.payload, key));
           } catch (decryptError) {
-            triggerNotification('error', 'バックアップデータの復号に失敗しました。現在の「セキュリティ復元パスワード」がエクスポート時と一致しているか確認してください。');
+            triggerNotification('error', 'バックアップデータの復号に失敗しました。「セキュリティ復元パスワード」がエクスポート時と一致しているか確認してください。');
             return;
           }
         }
 
-        if (typeof parsed !== 'object' || parsed === null) {
-          triggerNotification('error', '無効なファイル形式です。JSON形式のデータを選択してください。');
+        if (typeof parsed !== 'object' || parsed === null || !parsed.workers) {
+          triggerNotification('error', '対応していないファイル形式です。このアプリでエクスポートしたJSONを選択してください。');
           return;
         }
 
-        // Support both old nested backup format and full localStorage dump format
-        if (parsed.workers && parsed.jobs && parsed.workLogs) {
-          // Old format compatibility
-          saveWorkers(parsed.workers);
-          saveJobs(parsed.jobs);
-          saveWorkLogs(parsed.workLogs);
-          if (parsed.payments) savePayments(parsed.payments);
+        await migrateArraysToCloud({
+          workers: parsed.workers || [],
+          jobs: parsed.jobs || [],
+          workLogs: parsed.workLogs || [],
+          payments: parsed.payments || [],
+        });
 
-          if (parsed.credentials_main) {
-            localStorage.setItem('homeworkers_credentials_main', parsed.credentials_main);
-          }
-          if (parsed.credentials_dev) {
-            localStorage.setItem('homeworkers_credentials_dev', parsed.credentials_dev);
-          }
-        } else {
-          // Full LocalStorage dump format: clear current then write imported keys
-          localStorage.clear();
-          Object.entries(parsed).forEach(([key, value]) => {
-            if (typeof value === 'string') {
-              localStorage.setItem(key, value);
-            } else {
-              localStorage.setItem(key, JSON.stringify(value));
-            }
-          });
+        if (parsed.settings) {
+          saveSettings(parsed.settings);
+          setSettings(loadSettings());
+          onSettingsChange?.();
+        }
+        if (typeof parsed.bulletin === 'string') {
+          localStorage.setItem('homeworkers_bulletin_text', parsed.bulletin);
         }
 
-        loadConfigurations();
-        refreshStats();
-        
-        // Update local settings state so the changes reflect immediately
-        setSettings(loadSettings());
-        
-        if (onSettingsChange) {
-          onSettingsChange();
-        }
-        onDataReset(); // Notify main state to refresh
-        triggerNotification('success', 'JSONファイルからLocalStorageの全データを正常にインポートし、復元しました！');
+        triggerNotification('success', 'バックアップからクラウドへ復元しました。');
       } catch (err) {
-        triggerNotification('error', 'ファイルの読み込みまたは解析に失敗しました。ファイルがJSON形式か確認してください。');
+        triggerNotification('error', 'ファイルの読み込みまたは解析に失敗しました。JSON形式か確認してください。');
       }
     };
     fileReader.readAsText(files[0]);
-    // Clear input selection
     e.target.value = '';
   };
 
-  // Factory Reset
-  const handleFactoryReset = () => {
-    localStorage.removeItem('homework_workers');
-    localStorage.removeItem('homework_jobs');
-    localStorage.removeItem('homework_worklogs');
-    localStorage.removeItem('homework_payments');
-    localStorage.removeItem('homeworkers_credentials_main');
-    localStorage.removeItem('homeworkers_credentials_dev');
-
-    // Reload state
-    onDataReset();
-    setIsAuthorized(false);
-    sessionStorage.removeItem('homeworkers_app_dev_auth');
-    sessionStorage.removeItem('homeworkers_app_main_auth');
-    
-    // Refresh page or trigger callback
-    window.location.reload();
+  // Factory Reset: クラウド上の全業務データを削除
+  const handleFactoryReset = async () => {
+    try {
+      await Promise.all([
+        ...workers.map((w) => deleteItem(COLLECTIONS.WORKERS, w.id)),
+        ...jobs.map((j) => deleteItem(COLLECTIONS.JOBS, j.id)),
+        ...workLogs.map((l) => deleteItem(COLLECTIONS.WORK_LOGS, l.id)),
+        ...payments.map((p) => deleteItem(COLLECTIONS.PAYMENTS, p.id)),
+      ]);
+      triggerNotification('success', 'クラウド上の全業務データを削除しました。');
+    } catch (e) {
+      console.error(e);
+      triggerNotification('error', 'データ削除に失敗しました。');
+    }
+    setShowResetConfirm(false);
   };
-
-  if (!isAuthorized) {
-    return (
-      <div className="max-w-md mx-auto my-12" id="developer-auth-gate">
-        <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-xl space-y-6">
-          <div className="flex flex-col items-center text-center">
-            <div className="w-12 h-12 bg-rose-50 border border-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mb-4">
-              <ShieldAlert className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-black text-slate-800 tracking-tight">
-              開発者専用セクション
-            </h3>
-            <p className="text-xs text-slate-400 font-medium mt-1">
-              このタブに入るには、管理者またはシステム開発者アカウントでのログインが必要です。
-            </p>
-          </div>
-
-          {loginError && (
-            <div className="p-3 bg-rose-50 border border-rose-150 text-rose-700 text-xs rounded-xl font-bold text-center">
-              {loginError}
-            </div>
-          )}
-
-          <form onSubmit={handleVerifyDev} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">開発者ユーザー名</label>
-              <input
-                type="text"
-                required
-                placeholder="開発者ユーザー名を入力"
-                value={devUser}
-                onChange={(e) => setDevUser(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-slate-800 font-bold"
-                id="dev-username-input"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">開発者パスワード</label>
-              <div className="relative">
-                <input
-                  type={showDevPass ? 'text' : 'password'}
-                  required
-                  placeholder="パスワードを入力"
-                  value={devPass}
-                  onChange={(e) => setDevPass(e.target.value)}
-                  className="w-full pl-3.5 pr-10 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-mono font-bold"
-                  id="dev-password-input"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowDevPass(!showDevPass)}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
-                >
-                  {showDevPass ? <EyeOff className="w-4 h-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
-            >
-              認証して入る
-            </button>
-          </form>
-
-          <div className="text-center pt-3 border-t border-slate-100 text-[10px] text-slate-450 font-medium">
-            ※ 開発者ユーザー名・パスワードはシステム管理者のみが保持しています。
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6" id="developer-dashboard">
@@ -592,17 +431,16 @@ export default function DeveloperManager({ onDataReset, onSettingsChange, onDevA
           </div>
           <div>
             <h2 className="text-base font-black text-slate-800 tracking-tight">開発者コントロールセンター</h2>
-            <p className="text-xs text-slate-500 font-medium">システムの起動セキュリティ設定、資格証明、およびローカルデータのメンテナンスを行います。</p>
+            <p className="text-xs text-slate-500 font-medium">許可アカウントの管理、データ移行・バックアップ、ブランド設定などを行います。</p>
           </div>
         </div>
-        
-        <button
-          onClick={handleDevLogout}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer transition-all ml-auto"
-        >
-          <LogOut className="w-3.5 h-3.5 text-slate-500" />
-          開発者モード終了
-        </button>
+
+        {currentEmail && (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-150 ml-auto">
+            <UserCheck className="w-3.5 h-3.5" />
+            {currentEmail}
+          </div>
+        )}
       </div>
 
       {notification && (
@@ -619,90 +457,104 @@ export default function DeveloperManager({ onDataReset, onSettingsChange, onDevA
       {/* Grid of config sections */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Startup Authentication Panel */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        {/* 許可アカウント管理パネル */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 lg:col-span-2">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
             <UserCheck className="w-4 h-4 text-indigo-500" />
-            <h3 className="text-xs font-black text-slate-800 tracking-wide uppercase">通常起動時のログイン認証設定</h3>
+            <h3 className="text-xs font-black text-slate-800 tracking-wide uppercase">許可アカウント（Googleログイン）の管理</h3>
           </div>
           <p className="text-[11px] text-slate-450 font-medium">
-            ソフトウェアを開いたときに表示されるスタッフ専用のログインIDとパスワードを設定します。
+            このシステムにログインできるGoogleアカウントを管理します。ここで許可したメールアドレスのみがアプリを利用できます。
           </p>
 
-          <form onSubmit={handleSaveMainCreds} className="space-y-4 pt-1">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-650 mb-1">スタッフログインID</label>
-                <input
-                  type="text"
-                  required
-                  value={mainId}
-                  onChange={(e) => setMainId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-slate-800 font-bold"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-650 mb-1">パスワード</label>
-                <input
-                  type="text"
-                  required
-                  value={mainPass}
-                  onChange={(e) => setMainPass(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-slate-800 font-bold font-mono"
-                />
-              </div>
+          {/* メンバー追加 */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="email"
+                value={newMember}
+                onChange={(e) => setNewMember(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember(); } }}
+                placeholder="追加するメールアドレス"
+                className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-slate-800 font-bold"
+              />
             </div>
-            
             <button
-              type="submit"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+              type="button"
+              onClick={handleAddMember}
+              className="inline-flex items-center gap-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer shrink-0"
             >
-              通常ログイン資格情報を適用
+              <Plus className="w-3.5 h-3.5" /> 追加
             </button>
-          </form>
+          </div>
+
+          {/* メンバー一覧 */}
+          <div className="space-y-1.5">
+            {members.length === 0 && (
+              <p className="text-[11px] text-slate-400 font-bold py-2">許可アカウントがありません。</p>
+            )}
+            {members.map((email) => (
+              <div key={email} className="flex items-center justify-between bg-slate-50 border border-slate-150 rounded-xl px-3 py-2">
+                <span className="text-xs font-bold text-slate-700 break-all">{email}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  {email.toLowerCase() === devEmail.trim().toLowerCase() && (
+                    <span className="text-[9px] font-black text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded-md">開発者</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveMember(email)}
+                    className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                    title="削除"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 開発者メール変更 */}
+          <div className="pt-3 border-t border-slate-100 space-y-1.5">
+            <label className="block text-[10px] font-bold text-slate-650">開発者アカウント（開発者タブを操作できるメール）</label>
+            <input
+              type="email"
+              value={devEmail}
+              onChange={(e) => setDevEmail(e.target.value)}
+              placeholder="developer@example.com"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-slate-800 font-bold"
+            />
+            <p className="text-[9px] text-amber-600 font-bold flex items-start gap-1">
+              <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+              変更後は、この新しいメールのGoogleアカウントでログインした時のみ開発者タブを操作できます。必ずログイン可能なアドレスを指定してください。
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSaveAccess}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+          >
+            <Check className="w-3.5 h-3.5" /> 許可アカウントを保存
+          </button>
         </div>
 
-        {/* Developer Authentication Panel */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        {/* 端末内データのクラウド移行パネル */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 lg:col-span-2">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <Lock className="w-4 h-4 text-indigo-500" />
-            <h3 className="text-xs font-black text-slate-800 tracking-wide uppercase">開発者コントロール資格情報の変更</h3>
+            <CloudUpload className="w-4 h-4 text-indigo-500" />
+            <h3 className="text-xs font-black text-slate-800 tracking-wide uppercase">端末内データのクラウド移行</h3>
           </div>
           <p className="text-[11px] text-slate-450 font-medium">
-            この「開発者コントロールセンター」タブに入るためのパスワードとユーザー名を変更します。
+            以前この端末のブラウザ内(LocalStorage)に保存されていた担当者・作業・支払い等のデータを、共有クラウド(Firestore)へ取り込みます。1回だけ実行すれば十分です。
           </p>
-
-          <form onSubmit={handleSaveDevCreds} className="space-y-4 pt-1">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-650 mb-1">開発者ユーザー名</label>
-                <input
-                  type="text"
-                  required
-                  value={newDevId}
-                  onChange={(e) => setNewDevId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-slate-800 font-bold"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-650 mb-1">開発者パスワード</label>
-                <input
-                  type="text"
-                  required
-                  value={newDevPass}
-                  onChange={(e) => setNewDevPass(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-slate-800 font-bold font-mono"
-                />
-              </div>
-            </div>
-            
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
-            >
-              開発者ログイン情報を更新
-            </button>
-          </form>
+          <button
+            type="button"
+            onClick={handleMigrateLocal}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+          >
+            <CloudUpload className="w-3.5 h-3.5" /> 端末内データをクラウドへ移行
+          </button>
         </div>
 
         {/* Brand & Styling Panel */}
@@ -1312,13 +1164,7 @@ export default function DeveloperManager({ onDataReset, onSettingsChange, onDevA
               <Database className="w-4 h-4 text-indigo-500" />
               <h3 className="text-xs font-black text-slate-800 tracking-wide uppercase">現在のデータベース統計</h3>
             </div>
-            <button
-              onClick={refreshStats}
-              className="p-1 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
-              title="統計の更新"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
+            <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">クラウド同期中</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">

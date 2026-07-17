@@ -1,0 +1,44 @@
+rules_version = '2';
+
+// 内職報酬管理システム Firestore セキュリティルール
+// 許可アカウント一覧・開発者メールは config/access ドキュメントにのみ保存し、
+// このルールファイル（公開リポジトリ）にはメールアドレスを一切記載しない。
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function accessData() {
+      return get(/databases/$(database)/documents/config/access).data;
+    }
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+    // ログイン中メールが許可メンバーに含まれるか
+    function isMember() {
+      return isSignedIn() && request.auth.token.email.lower() in accessData().members;
+    }
+    // ログイン中メールが開発者メールと一致するか
+    function isDeveloper() {
+      return isSignedIn() && request.auth.token.email.lower() == accessData().developerEmail.lower();
+    }
+
+    // 許可アカウント設定: メンバーのみ閲覧可、開発者のみ変更可
+    match /config/access {
+      allow read: if isMember();
+      allow write: if isDeveloper();
+    }
+
+    // 業務データ・共有設定・お知らせ: 許可メンバーのみ read/write
+    match /workers/{id}  { allow read, write: if isMember(); }
+    match /jobs/{id}     { allow read, write: if isMember(); }
+    match /workLogs/{id} { allow read, write: if isMember(); }
+    match /payments/{id} { allow read, write: if isMember(); }
+    match /settings/{id} { allow read, write: if isMember(); }
+    match /meta/{id}     { allow read, write: if isMember(); }
+
+    // 上記以外は全て拒否
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

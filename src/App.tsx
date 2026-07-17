@@ -5,25 +5,27 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Worker, Job, WorkLog, MonthlyPayment, PaymentStatus, WorkStatus } from './types';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { Worker, Job, WorkLog, MonthlyPayment, PaymentStatus } from './types';
+import { loadSettings } from './utils';
+import { auth, logoutGoogle } from './lib/firebaseAuth';
 import {
-  loadWorkers,
-  saveWorkers,
-  loadJobs,
-  saveJobs,
-  loadWorkLogs,
-  saveWorkLogs,
-  loadPayments,
-  savePayments,
-  loadSettings,
-  saveSettings,
-} from './utils';
+  COLLECTIONS,
+  subscribeCollection,
+  upsertItem,
+  deleteItem,
+} from './lib/store';
+import {
+  AccessConfig,
+  subscribeAccessConfig,
+  resolveRole,
+} from './lib/access';
+import { GoogleLoginScreen, AccessDeniedScreen, LoadingScreen } from './components/AuthScreens';
 import Dashboard from './components/Dashboard';
 import WorkerManager from './components/WorkerManager';
 import JobManager from './components/JobManager';
 import WorkLogManager from './components/WorkLogManager';
 import PaymentManager from './components/PaymentManager';
-import LoginScreen from './components/LoginScreen';
 import DeveloperManager from './components/DeveloperManager';
 import ContractorSettings from './components/ContractorSettings';
 import { 
@@ -60,12 +62,16 @@ const tabVariants = {
 };
 
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    return sessionStorage.getItem('homeworkers_app_main_auth') === 'true';
-  });
-  const [isDev, setIsDev] = useState<boolean>(() => {
-    return sessionStorage.getItem('homeworkers_app_dev_auth') === 'true';
-  });
+  // --- 認証・アクセス制御 (Googleログイン + Firestore許可リスト) ---
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState<boolean>(false);
+  const [accessConfig, setAccessConfig] = useState<AccessConfig | null>(null);
+  const [accessReady, setAccessReady] = useState<boolean>(false);
+
+  const role = resolveRole(authUser?.email, accessConfig);
+  const isAllowed = role !== 'denied';
+  const isDev = role === 'developer';
+
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [settings, setSettings] = useState(() => loadSettings());
 
@@ -214,28 +220,66 @@ export default function App() {
   const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
   const [payments, setPayments] = useState<MonthlyPayment[]>([]);
 
-  // Load from LocalStorage on mount
+  // Firebase 認証状態の監視
   useEffect(() => {
-    if (isLoggedIn) {
-      setWorkers(loadWorkers());
-      setJobs(loadJobs());
-      setWorkLogs(loadWorkLogs());
-      setPayments(loadPayments());
-    }
-  }, [isLoggedIn]);
+    return onAuthStateChanged(auth, (user) => {
+      setAuthUser(user);
+      setAuthReady(true);
+    });
+  }, []);
 
-  const handleDataReset = () => {
-    setWorkers(loadWorkers());
-    setJobs(loadJobs());
-    setWorkLogs(loadWorkLogs());
-    setPayments(loadPayments());
-  };
+  // ログイン中は許可リスト(config/access)を購読して役割を判定
+  useEffect(() => {
+    if (!authUser) {
+      setAccessConfig(null);
+      setAccessReady(true);
+      return;
+    }
+    setAccessReady(false);
+    const unsub = subscribeAccessConfig(
+      (cfg) => {
+        setAccessConfig(cfg);
+        setAccessReady(true);
+      },
+      (err) => {
+        // 権限なし(rules拒否)や未作成時はアクセス不可として扱う
+        console.error('アクセス設定の取得に失敗:', err);
+        setAccessConfig(null);
+        setAccessReady(true);
+      }
+    );
+    return unsub;
+  }, [authUser]);
+
+  // 許可されたユーザーのみ、業務データを Firestore からリアルタイム購読
+  useEffect(() => {
+    if (!isAllowed) {
+      setWorkers([]);
+      setJobs([]);
+      setWorkLogs([]);
+      setPayments([]);
+      return;
+    }
+    const unsubs = [
+      subscribeCollection<Worker>(COLLECTIONS.WORKERS, setWorkers),
+      subscribeCollection<Job>(COLLECTIONS.JOBS, setJobs),
+      subscribeCollection<WorkLog>(COLLECTIONS.WORK_LOGS, setWorkLogs),
+      subscribeCollection<MonthlyPayment>(COLLECTIONS.PAYMENTS, setPayments),
+    ];
+    return () => unsubs.forEach((u) => u());
+  }, [isAllowed]);
+
+  // 購読でstateは自動更新されるため、明示的な再読込は不要（プロップ互換のため残置）
+  const handleDataReset = () => {};
 
   const handleLogout = () => {
-    sessionStorage.removeItem('homeworkers_app_main_auth');
-    sessionStorage.removeItem('homeworkers_app_dev_auth');
-    setIsLoggedIn(false);
-    setIsDev(false);
+    logoutGoogle();
+  };
+
+  // Firestore書込み失敗時の共通ハンドラ
+  const handleWriteError = (e: unknown) => {
+    console.error('Firestoreへの保存に失敗:', e);
+    alert('保存に失敗しました。通信状況を確認のうえ、もう一度お試しください。');
   };
 
   // --- Worker Actions ---
@@ -245,15 +289,11 @@ export default function App() {
       id: `worker-${crypto.randomUUID()}`,
       createdAt: new Date().toISOString(),
     };
-    const updated = [...workers, worker];
-    setWorkers(updated);
-    saveWorkers(updated);
+    upsertItem(COLLECTIONS.WORKERS, worker).catch(handleWriteError);
   };
 
   const handleUpdateWorker = (updatedWorker: Worker) => {
-    const updated = workers.map(w => (w.id === updatedWorker.id ? updatedWorker : w));
-    setWorkers(updated);
-    saveWorkers(updated);
+    upsertItem(COLLECTIONS.WORKERS, updatedWorker).catch(handleWriteError);
   };
 
   // --- Job Master Actions ---
@@ -263,15 +303,11 @@ export default function App() {
       id: `job-${crypto.randomUUID()}`,
       createdAt: new Date().toISOString(),
     };
-    const updated = [...jobs, job];
-    setJobs(updated);
-    saveJobs(updated);
+    upsertItem(COLLECTIONS.JOBS, job).catch(handleWriteError);
   };
 
   const handleUpdateJob = (updatedJob: Job) => {
-    const updated = jobs.map(j => (j.id === updatedJob.id ? updatedJob : j));
-    setJobs(updated);
-    saveJobs(updated);
+    upsertItem(COLLECTIONS.JOBS, updatedJob).catch(handleWriteError);
   };
 
   // --- Work Log Actions ---
@@ -283,22 +319,16 @@ export default function App() {
       paymentId: null,
       createdAt: new Date().toISOString(),
     };
-    const updated = [...workLogs, log];
-    setWorkLogs(updated);
-    saveWorkLogs(updated);
+    upsertItem(COLLECTIONS.WORK_LOGS, log).catch(handleWriteError);
   };
 
   const handleUpdateWorkLog = (updatedLog: WorkLog) => {
-    const updated = workLogs.map(l => (l.id === updatedLog.id ? updatedLog : l));
-    setWorkLogs(updated);
-    saveWorkLogs(updated);
+    upsertItem(COLLECTIONS.WORK_LOGS, updatedLog).catch(handleWriteError);
   };
 
   const handleDeleteWorkLog = (id: string) => {
     if (confirm('この進捗・作業記録を削除してもよろしいですか？')) {
-      const updated = workLogs.filter(l => l.id !== id);
-      setWorkLogs(updated);
-      saveWorkLogs(updated);
+      deleteItem(COLLECTIONS.WORK_LOGS, id).catch(handleWriteError);
     }
   };
 
@@ -327,7 +357,6 @@ export default function App() {
 
     // Update or Create Payment entry
     const existingPaymentIdx = payments.findIndex(p => p.id === paymentId);
-    let updatedPayments = [...payments];
 
     const paymentData: MonthlyPayment = {
       id: paymentId,
@@ -343,34 +372,24 @@ export default function App() {
 
     if (existingPaymentIdx > -1) {
       paymentData.createdAt = payments[existingPaymentIdx].createdAt;
-      updatedPayments[existingPaymentIdx] = paymentData;
-    } else {
-      updatedPayments.push(paymentData);
     }
 
-    setPayments(updatedPayments);
-    savePayments(updatedPayments);
+    // Propagate "Paid" status to associated work logs to lock them from edits
+    const changedLogs = associatedLogs.map((log) => ({
+      ...log,
+      isPaid: status === 'paid',
+      paymentId: status === 'paid' ? paymentId : null,
+    }));
 
-    // Propagate "Paid" status to individual work logs to lock them from edits
-    const updatedWorkLogs = workLogs.map(log => {
-      if (associatedLogIds.includes(log.id)) {
-        return {
-          ...log,
-          isPaid: status === 'paid',
-          paymentId: status === 'paid' ? paymentId : null,
-        };
-      }
-      return log;
-    });
-
-    setWorkLogs(updatedWorkLogs);
-    saveWorkLogs(updatedWorkLogs);
+    // 支払いドキュメントと関連作業記録をFirestoreへ保存
+    Promise.all([
+      upsertItem(COLLECTIONS.PAYMENTS, paymentData),
+      ...changedLogs.map((log) => upsertItem(COLLECTIONS.WORK_LOGS, log)),
+    ]).catch(handleWriteError);
   };
 
   const handleUpdatePayment = (updatedPayment: MonthlyPayment) => {
-    const updated = payments.map(p => (p.id === updatedPayment.id ? updatedPayment : p));
-    setPayments(updated);
-    savePayments(updated);
+    upsertItem(COLLECTIONS.PAYMENTS, updatedPayment).catch(handleWriteError);
   };
 
   // --- Copy Protection & Security ---
@@ -523,8 +542,18 @@ export default function App() {
     );
   }
 
-  if (!isLoggedIn) {
-    return <LoginScreen onLoginSuccess={() => setIsLoggedIn(true)} />;
+  // --- 認証ゲート (Googleログイン + 許可リスト) ---
+  if (!authReady) {
+    return <LoadingScreen message="認証を確認しています..." />;
+  }
+  if (!authUser) {
+    return <GoogleLoginScreen />;
+  }
+  if (!accessReady) {
+    return <LoadingScreen message="アクセス権を確認しています..." />;
+  }
+  if (!isAllowed) {
+    return <AccessDeniedScreen email={authUser.email} />;
   }
 
   // Bulletin Notice text
@@ -688,8 +717,8 @@ export default function App() {
                   );
                 })()}
 
-                {/* Developer Tab */}
-                {(() => {
+                {/* Developer Tab (開発者ロールのみ表示) */}
+                {isDev && (() => {
                   const { name, IconComponent } = getTabDetails('developer', 'developer', Terminal);
                   return (
                     <button
@@ -813,11 +842,15 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'developer' && (
+            {activeTab === 'developer' && isDev && (
               <DeveloperManager
-                onDataReset={handleDataReset}
                 onSettingsChange={() => setSettings(loadSettings())}
-                onDevAuthChange={(authorized) => setIsDev(authorized)}
+                currentEmail={authUser.email}
+                accessConfig={accessConfig}
+                workers={workers}
+                jobs={jobs}
+                workLogs={workLogs}
+                payments={payments}
               />
             )}
           </motion.div>
