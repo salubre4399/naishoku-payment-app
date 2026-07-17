@@ -78,6 +78,7 @@ export interface AppSettings {
   companyStampUrl?: string;
   showCompanyStampOnPrint?: boolean;
   showNgOnStatement?: boolean; // 明細書にNG数（不良数）を表示するか（既定: 非表示）
+  planPrices?: Record<string, number>; // 各プランの月額（円）。キーはPLANSのkey。0は「応相談」。
   tabCustomizations?: Record<string, TabCustomization>;
   securityDomainLock?: string;
   securityBlockRightClick?: boolean;

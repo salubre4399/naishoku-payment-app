@@ -5,18 +5,22 @@
 
 import React, { useState } from 'react';
 import { AppSettings, PaymentConfig } from '../types';
-import { 
-  loadSettings, 
-  saveSettings 
+import {
+  loadSettings,
+  saveSettings,
+  PLANS,
+  getPlanPrice,
+  getCurrentPlan
 } from '../utils';
-import { 
-  Settings, 
-  SlidersHorizontal, 
-  FileText, 
-  Upload, 
-  Trash2, 
+import {
+  Settings,
+  SlidersHorizontal,
+  FileText,
+  Upload,
+  Trash2,
   Building,
-  AlertTriangle
+  AlertTriangle,
+  ShieldCheck
 } from 'lucide-react';
 import GoogleDriveManager from './GoogleDriveManager';
 
@@ -133,6 +137,65 @@ export default function ContractorSettings({ onSettingsChange, onDataReset }: Co
             <span>{notification.text}</span>
           </div>
         )}
+      </div>
+
+      {/* 契約プラン（現在のプラン＋プラン一覧・料金） */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+          <ShieldCheck className="w-4.5 h-4.5 text-indigo-500" />
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">ご契約プラン</h3>
+        </div>
+
+        {(() => {
+          const current = getCurrentPlan(settings.workerLimit);
+          const currentName = current ? current.name : 'カスタムプラン';
+          const limitText = settings.workerLimit === 99999 ? '無制限' : `${settings.workerLimit}名`;
+          const currentPrice = current ? getPlanPrice(settings, current.key) : null;
+          return (
+            <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-black text-indigo-500 uppercase tracking-wider block">現在のプラン</span>
+                <span className="text-base font-black text-slate-850">{currentName}</span>
+                <span className="text-[11px] text-slate-500 font-bold ml-2">内職者 上限 {limitText}</span>
+              </div>
+              {currentPrice !== null && (
+                <div className="text-right shrink-0">
+                  <span className="text-lg font-black text-indigo-700 font-mono">{currentPrice > 0 ? `¥${currentPrice.toLocaleString()}` : '応相談'}</span>
+                  {currentPrice > 0 && <span className="text-[10px] text-slate-400 font-bold"> /月</span>}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        <div>
+          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">プラン一覧・料金</label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {PLANS.map((plan) => {
+              const price = getPlanPrice(settings, plan.key);
+              const isCurrent = settings.workerLimit === plan.limit;
+              return (
+                <div
+                  key={plan.key}
+                  className={`p-3 rounded-xl border flex flex-col items-center justify-center text-center transition-all ${
+                    isCurrent ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600'
+                  }`}
+                >
+                  <span className="text-[10px] font-black">{plan.name}</span>
+                  <span className="text-[9px] font-medium opacity-80 mt-0.5">{plan.limit === 99999 ? '無制限' : `上限${plan.limit}名`}</span>
+                  <span className="text-xs font-black font-mono mt-1">{price > 0 ? `¥${price.toLocaleString()}` : '応相談'}</span>
+                  {price > 0 && <span className="text-[8px] text-slate-400 font-bold">/月</span>}
+                  {isCurrent && <span className="mt-1 text-[8px] font-black bg-indigo-600 text-white px-1.5 py-0.5 rounded-full">利用中</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="p-3.5 bg-slate-50 border border-slate-150 rounded-2xl text-[11px] text-slate-600 font-semibold leading-relaxed flex gap-2 items-start">
+          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <span>プランの変更（内職者の登録上限の拡大）をご希望の場合は、システム提供元までご連絡ください。上限に達すると新しい内職担当者を追加できません。</span>
+        </div>
       </div>
 
       {/* Grid Layout of Bento-like Settings Cards */}

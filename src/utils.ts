@@ -112,6 +112,33 @@ export const savePayments = (payments: MonthlyPayment[]) => {
   localStorage.setItem(KEYS.PAYMENTS, JSON.stringify(payments));
 };
 
+// サブスク・プラン定義（開発者タブの選択肢＝契約者タブの表示に共通利用）
+export interface PlanDef {
+  key: string;
+  name: string;
+  limit: number;        // 内職者の登録上限（99999=無制限）
+  defaultPrice: number; // 月額の既定値（円）。0は「応相談」表示。
+}
+
+export const PLANS: PlanDef[] = [
+  { key: 'light', name: 'ライトプラン', limit: 5, defaultPrice: 3000 },
+  { key: 'standard', name: 'スタンダードプラン', limit: 15, defaultPrice: 6000 },
+  { key: 'pro', name: 'プロプラン', limit: 30, defaultPrice: 10000 },
+  { key: 'enterprise', name: 'エンタープライズ', limit: 99999, defaultPrice: 0 },
+];
+
+// プランの月額（設定に保存があればそれを、なければ既定値）
+export const getPlanPrice = (settings: AppSettings, key: string): number => {
+  const custom = settings.planPrices?.[key];
+  if (typeof custom === 'number' && !Number.isNaN(custom)) return custom;
+  return PLANS.find((p) => p.key === key)?.defaultPrice ?? 0;
+};
+
+// 現在の登録上限に対応するプラン（一致がなければ null＝カスタム扱い）
+export const getCurrentPlan = (workerLimit: number): PlanDef | null => {
+  return PLANS.find((p) => p.limit === workerLimit) || null;
+};
+
 // Formatters
 export const formatYen = (num: number): string => {
   // 単価に小数（例: 1.25円）を許容するため、小数第2位まで表示できるようにする。

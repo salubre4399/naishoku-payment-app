@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { Worker, Job } from '../types';
-import { UserPlus, Edit2, Trash2, Search, Check, X, Phone, Mail, Landmark, AlertTriangle, Hammer, Tag } from 'lucide-react';
+import { UserPlus, Edit2, Trash2, Search, Check, X, Phone, Mail, Landmark, AlertTriangle, Hammer, Tag, Settings } from 'lucide-react';
 
 interface WorkerManagerProps {
   workers: Worker[];
@@ -14,13 +14,15 @@ interface WorkerManagerProps {
   onUpdateWorker: (worker: Worker) => void;
   onDeleteWorker: (worker: Worker) => void;
   workerLimit: number;
+  onNavigateToSettings?: () => void;
 }
 
-export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWorker, onDeleteWorker, workerLimit }: WorkerManagerProps) {
+export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWorker, onDeleteWorker, workerLimit, onNavigateToSettings }: WorkerManagerProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
   const [limitError, setLimitError] = useState<string>('');
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
   // Form states
   const [name, setName] = useState('');
@@ -130,7 +132,13 @@ export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWork
           />
         </div>
         <button
-          onClick={handleOpenAdd}
+          onClick={() => {
+            if (workers.length >= workerLimit) {
+              setShowLimitModal(true);
+            } else {
+              handleOpenAdd();
+            }
+          }}
           className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-2 px-5 rounded-xl shadow-xs transition-all cursor-pointer"
           id="btn-add-worker"
         >
@@ -501,6 +509,44 @@ export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWork
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 上限到達ポップアップ（「内職担当者を追加」押下時） */}
+      {showLimitModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mx-auto">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="text-center space-y-1.5">
+                <h3 className="text-base font-black text-slate-800">登録上限に達しています</h3>
+                <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                  現在のプランの上限（{workerLimit === 99999 ? '無制限' : `${workerLimit}名`}）に達しているため、これ以上は内職担当者を追加できません。
+                  <br />プランのアップデートをご検討ください。
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 pt-1">
+                {onNavigateToSettings && (
+                  <button
+                    onClick={() => { setShowLimitModal(false); onNavigateToSettings(); }}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer inline-flex items-center justify-center gap-1.5"
+                    id="btn-goto-plan-settings"
+                  >
+                    <Settings className="w-4 h-4" />
+                    設定タブでプランを確認する
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowLimitModal(false)}
+                  className="w-full py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  閉じる
+                </button>
+              </div>
             </div>
           </div>
         </div>

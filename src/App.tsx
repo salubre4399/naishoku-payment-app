@@ -801,6 +801,7 @@ export default function App() {
                 onUpdateWorker={handleUpdateWorker}
                 onDeleteWorker={handleDeleteWorker}
                 workerLimit={settings.workerLimit}
+                onNavigateToSettings={() => setActiveTab('contractor-settings')}
               />
             )}
 

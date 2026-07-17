@@ -44,7 +44,8 @@ import {
   loadWorkLogs,
   loadPayments,
   loadSettings,
-  saveSettings
+  saveSettings,
+  PLANS
 } from '../utils';
 import { AccessConfig, saveAccessConfig } from '../lib/access';
 import { COLLECTIONS, deleteItem, migrateArraysToCloud } from '../lib/store';
@@ -69,6 +70,7 @@ const SETTING_LABELS: Partial<Record<keyof AppSettings, string>> = {
   securityBlockDevTools: '開発者ツール禁止',
   securityEncryptBackup: 'バックアップ暗号化',
   securityBackupPassword: 'セキュリティ復元パスワード',
+  planPrices: 'プラン料金',
 };
 
 const TAB_NAMES: Record<string, string> = {
@@ -92,6 +94,10 @@ const formatSettingValue = (key: keyof AppSettings, val: unknown): string => {
   if (key === 'hiddenTabs' && Array.isArray(val)) {
     return val.length ? val.map((t) => TAB_NAMES[t] || t).join('、') : '（なし）';
   }
+  if (key === 'planPrices' && typeof val === 'object') {
+    const pp = val as Record<string, number>;
+    return PLANS.map((p) => `${p.name} ¥${(pp[p.key] ?? p.defaultPrice).toLocaleString()}`).join(' / ');
+  }
   return String(val);
 };
 
@@ -103,7 +109,7 @@ const computeSettingsDiff = (before: AppSettings, after: AppSettings): SettingsD
   const keys: (keyof AppSettings)[] = [
     'appName', 'appLogo', 'accentColor', 'workerLimit', 'customLogoUrl', 'companyStampUrl',
     'showCompanyStampOnPrint', 'hiddenTabs', 'securityDomainLock', 'securityBlockRightClick',
-    'securityBlockDevTools', 'securityEncryptBackup', 'securityBackupPassword',
+    'securityBlockDevTools', 'securityEncryptBackup', 'securityBackupPassword', 'planPrices',
   ];
   for (const k of keys) {
     if (JSON.stringify(before[k]) !== JSON.stringify(after[k])) {
@@ -1249,6 +1255,38 @@ export default function DeveloperManager({
                 </button>
               </div>
             )}
+
+            {/* 各プランの月額料金（契約者の設定タブに表示されます） */}
+            <div className="pt-3 border-t border-slate-100 space-y-2">
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">各プランの月額料金（契約者の設定タブに表示されます）</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {PLANS.map((plan) => (
+                  <div key={plan.key} className="flex items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-black text-slate-700 truncate">{plan.name}</div>
+                      <div className="text-[9px] text-slate-400 font-bold">{plan.limit === 99999 ? '無制限' : `上限${plan.limit}名`}</div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] font-bold text-slate-400">¥</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={settings.planPrices?.[plan.key] ?? plan.defaultPrice}
+                        onChange={(e) =>
+                          updateSettingField('planPrices', {
+                            ...(settings.planPrices || {}),
+                            [plan.key]: parseInt(e.target.value, 10) || 0,
+                          })
+                        }
+                        className="w-20 px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-bold font-mono text-right"
+                      />
+                      <span className="text-[9px] text-slate-400 font-bold">/月</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[9px] text-slate-400 font-medium">0円は「応相談」と表示されます。変更後は画面下部の「設定を反映」で保存してください。</p>
+            </div>
 
             <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 text-[10px] text-amber-800 font-semibold space-y-1">
               <div className="flex gap-1.5 items-center font-bold">
