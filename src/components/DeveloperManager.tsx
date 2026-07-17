@@ -48,7 +48,7 @@ import {
   PLANS
 } from '../utils';
 import { AccessConfig, saveAccessConfig } from '../lib/access';
-import { COLLECTIONS, deleteItem, migrateArraysToCloud } from '../lib/store';
+import { COLLECTIONS, deleteItem, migrateArraysToCloud, saveSettingsToCloud } from '../lib/store';
 import { Mail, Plus, X, CloudUpload, ExternalLink } from 'lucide-react';
 
 // Google Cloud OAuth同意画面（テストユーザー登録）へのリンク
@@ -295,6 +295,7 @@ export default function DeveloperManager({
 
   const handleConfirmApply = () => {
     saveSettings(settings);
+    saveSettingsToCloud(settings).catch((e) => console.error('設定のクラウド保存に失敗:', e));
     setAppliedSettings(settings);
     if (onSettingsChange) {
       onSettingsChange();
@@ -487,6 +488,7 @@ export default function DeveloperManager({
           const restored = loadSettings();
           setSettings(restored);
           setAppliedSettings(restored);
+          saveSettingsToCloud(restored).catch((e) => console.error('設定のクラウド保存に失敗:', e));
           onSettingsChange?.();
         }
         if (typeof parsed.bulletin === 'string') {

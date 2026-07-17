@@ -9,6 +9,7 @@ import { formatYen, formatDateJP, formatMonthJP, loadSettings, saveSettings } fr
 import { X, Printer, Building2, Landmark, Check, Cloud, Loader2 } from 'lucide-react';
 import { getAccessToken } from '../lib/firebaseAuth';
 import { initializeAppFolders, uploadFileToDrive } from '../lib/googleDrive';
+import { saveSettingsToCloud } from '../lib/store';
 
 interface StatementModalProps {
   isOpen: boolean;
@@ -232,6 +233,7 @@ ${bankDetailsText}
                   const updated = { ...settings, showCompanyStampOnPrint: e.target.checked };
                   setSettings(updated);
                   saveSettings(updated);
+                  saveSettingsToCloud(updated).catch(() => {});
                 }}
                 className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
               />

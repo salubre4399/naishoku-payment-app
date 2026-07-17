@@ -7,11 +7,12 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Worker, Job, WorkLog, MonthlyPayment, PaymentStatus } from './types';
-import { loadSettings } from './utils';
+import { loadSettings, saveSettings } from './utils';
 import { auth, logoutGoogle } from './lib/firebaseAuth';
 import {
   COLLECTIONS,
   subscribeCollection,
+  subscribeSettings,
   upsertItem,
   deleteItem,
 } from './lib/store';
@@ -267,6 +268,22 @@ export default function App() {
       subscribeCollection<MonthlyPayment>(COLLECTIONS.PAYMENTS, setPayments),
     ];
     return () => unsubs.forEach((u) => u());
+  }, [isAllowed]);
+
+  // アプリ設定（プラン・上限・料金・ブランド等）をクラウドから購読し全端末で共有する。
+  // クラウドに設定が存在すればそれを唯一の正とし、localStorageにもミラーする。
+  useEffect(() => {
+    if (!isAllowed) return;
+    const unsub = subscribeSettings(
+      (cloud) => {
+        if (cloud) {
+          saveSettings(cloud);   // 他コンポーネントの loadSettings() 用にlocalStorageへ反映
+          setSettings(cloud);
+        }
+      },
+      (err) => console.error('設定のクラウド購読に失敗:', err)
+    );
+    return unsub;
   }, [isAllowed]);
 
   // 購読でstateは自動更新されるため、明示的な再読込は不要（プロップ互換のため残置）

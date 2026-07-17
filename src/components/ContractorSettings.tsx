@@ -23,6 +23,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import GoogleDriveManager from './GoogleDriveManager';
+import { saveSettingsToCloud } from '../lib/store';
 
 interface ContractorSettingsProps {
   onSettingsChange: () => void;
@@ -66,6 +67,7 @@ export default function ContractorSettings({ onSettingsChange, onDataReset }: Co
     const updated = { ...settings, [key]: value };
     setSettings(updated);
     saveSettings(updated);
+    saveSettingsToCloud(updated).catch((e) => console.error('設定のクラウド保存に失敗:', e));
     onSettingsChange();
     triggerNotification('success', 'アプリ設定を更新しました。');
   };
@@ -104,6 +106,7 @@ export default function ContractorSettings({ onSettingsChange, onDataReset }: Co
     delete updated.companyStampUrl;
     setSettings(updated);
     saveSettings(updated);
+    saveSettingsToCloud(updated).catch((e) => console.error('設定のクラウド保存に失敗:', e));
     onSettingsChange();
     triggerNotification('success', '会社印影を削除しました。');
   };
