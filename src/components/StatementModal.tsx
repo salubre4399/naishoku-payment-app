@@ -166,7 +166,7 @@ export default function StatementModal({
       // Build statement text representation
       const currentDate = new Date().toLocaleDateString('ja-JP');
       const itemsText = lineItems.map(item => {
-        const ngDetail = item.ngQuantity > 0 ? ` (総数: ${item.quantity} / NG: ${item.ngQuantity})` : '';
+        const ngDetail = (settings.showNgOnStatement && item.ngQuantity > 0) ? ` (総数: ${item.quantity} / NG: ${item.ngQuantity})` : '';
         return `• ${item.name}${ngDetail}\n  単価: ${formatYen(item.unitPrice)} | 良品数: ${item.okQuantity} 個 | 金額: ${formatYen(item.okQuantity * item.unitPrice)}`;
       }).join('\n');
 
@@ -408,7 +408,7 @@ ${bankDetailsText}
                     <tr key={idx} className="hover:bg-slate-50/10">
                       <td className="py-2.5 px-3 font-semibold text-slate-800">
                         <div>{item.name}</div>
-                        {item.ngQuantity > 0 && (
+                        {settings.showNgOnStatement && item.ngQuantity > 0 && (
                           <div className="text-[10px] text-slate-400 font-normal">
                             (内訳: 総数 {item.quantity.toLocaleString()} 個 / NG {item.ngQuantity.toLocaleString()} 個)
                           </div>
@@ -430,7 +430,7 @@ ${bankDetailsText}
                     <td colSpan={2} className="py-2.5 px-3 text-left">合計（非課税）</td>
                     <td className="py-2.5 px-3 text-right font-mono text-slate-600">
                       <div>{lineItems.reduce((sum, i) => sum + i.okQuantity, 0).toLocaleString()} 個</div>
-                      {lineItems.reduce((sum, i) => sum + i.ngQuantity, 0) > 0 && (
+                      {settings.showNgOnStatement && lineItems.reduce((sum, i) => sum + i.ngQuantity, 0) > 0 && (
                         <div className="text-[9px] text-rose-500 font-medium">(NG 合計: {lineItems.reduce((sum, i) => sum + i.ngQuantity, 0).toLocaleString()} 個)</div>
                       )}
                     </td>

@@ -77,6 +77,7 @@ export interface AppSettings {
   customLogoUrl?: string;
   companyStampUrl?: string;
   showCompanyStampOnPrint?: boolean;
+  showNgOnStatement?: boolean; // 明細書にNG数（不良数）を表示するか（既定: 非表示）
   tabCustomizations?: Record<string, TabCustomization>;
   securityDomainLock?: string;
   securityBlockRightClick?: boolean;

@@ -322,6 +322,22 @@ export default function ContractorSettings({ onSettingsChange, onDataReset }: Co
               </div>
             </div>
 
+            {/* 明細書のNG数（不良数）表示 設定 */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 space-y-2">
+              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={settings.showNgOnStatement || false}
+                  onChange={(e) => handleUpdateAppSetting('showNgOnStatement', e.target.checked)}
+                  className="w-4 h-4 mt-0.5 text-indigo-600 focus:ring-indigo-500 border-slate-300 rounded-sm cursor-pointer shrink-0"
+                />
+                <div>
+                  <span className="text-[11px] font-black text-slate-700 block">明細書に NG数（不良数）を表示する</span>
+                  <span className="text-[9px] text-slate-450 font-bold">既定は非表示です。ONにすると、明細書の内訳と合計に「NG数」が印字されます。</span>
+                </div>
+              </label>
+            </div>
+
             {/* Auto payment date rules */}
             <div className="text-xs space-y-2">
               <div>
