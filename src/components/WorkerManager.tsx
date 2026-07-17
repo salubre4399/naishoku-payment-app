@@ -20,6 +20,7 @@ export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWork
   const [searchTerm, setSearchTerm] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
+  const [limitError, setLimitError] = useState<string>('');
 
   // Form states
   const [name, setName] = useState('');
@@ -51,6 +52,7 @@ export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWork
     setBankAccountHolder('');
     setAllowedJobIds([]);
     setIsActive(true);
+    setLimitError('');
     setEditingWorker(null);
     setIsFormOpen(false);
   };
@@ -61,6 +63,7 @@ export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWork
   };
 
   const handleOpenEdit = (worker: Worker) => {
+    setLimitError('');
     setEditingWorker(worker);
     setName(worker.name);
     setPhone(worker.phone);
@@ -78,6 +81,14 @@ export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWork
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+
+    // 新規登録は上限を超えられない。登録ボタン押下時にエラーを表示して中止する。
+    if (!editingWorker && workers.length >= workerLimit) {
+      setLimitError(
+        `登録上限（${workerLimit === 99999 ? '無制限' : `${workerLimit}名`}）に達しています。現在 ${workers.length} 名が登録済みのため、これ以上は登録できません。上限を増やすには開発者設定でプランを変更し「設定を反映」してください。`
+      );
+      return;
+    }
 
     const workerData = {
       name,
@@ -256,21 +267,24 @@ export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWork
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-5">
-                {!editingWorker && workers.length >= workerLimit ? (
-                  <div className="p-4 bg-rose-50 border border-rose-150 text-rose-800 rounded-2xl space-y-3.5 animate-in fade-in duration-200">
+                {!editingWorker && workers.length >= workerLimit && (
+                  <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl space-y-1.5 animate-in fade-in duration-200">
                     <div className="flex gap-2 items-start font-black text-xs">
-                      <AlertTriangle className="w-5 h-5 shrink-0 text-rose-650 mt-0.5" />
-                      <div>内職担当者の新規追加が制限されています</div>
+                      <AlertTriangle className="w-4.5 h-4.5 shrink-0 text-amber-600 mt-0.5" />
+                      <div>登録上限に達しています</div>
                     </div>
                     <p className="text-[11px] leading-relaxed font-semibold text-slate-700">
-                      現在設定されているプランの上限数（最大 <strong>{workerLimit} 名</strong>）に達しています（現在の登録者: <strong>{workers.length} 名</strong>）。
-                    </p>
-                    <p className="text-[11px] leading-relaxed font-medium text-slate-500">
-                      新しく担当者を追加して作業を依頼するには、プラン契約のアップグレードが必要です。開発者タブ（デベロッパー設定）にて契約上限数を拡大するよう管理者にご依頼ください。
+                      プランの上限（最大 <strong>{workerLimit === 99999 ? '無制限' : `${workerLimit} 名`}</strong>）に達しています（現在の登録者: <strong>{workers.length} 名</strong>）。このまま「登録する」を押すとエラーになります。上限を変更するには開発者設定をご確認ください。
                     </p>
                   </div>
-                ) : (
-                  <>
+                )}
+                {limitError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-[11px] font-bold flex gap-2 items-start animate-in fade-in duration-200" id="worker-limit-error">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{limitError}</span>
+                  </div>
+                )}
+                <>
                     {/* Section 1: Basic Info */}
                     <div className="space-y-4">
                       <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider">基本情報</h4>
@@ -468,7 +482,6 @@ export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWork
                       </label>
                     </div>
                   </>
-                )}
 
                 {/* Actions */}
                 <div className="flex gap-3 pt-6 border-t border-slate-100">
@@ -481,12 +494,7 @@ export default function WorkerManager({ workers, jobs, onAddWorker, onUpdateWork
                   </button>
                   <button
                     type="submit"
-                    disabled={!editingWorker && workers.length >= workerLimit}
-                    className={`flex-1 py-2 text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer text-center ${
-                      !editingWorker && workers.length >= workerLimit
-                        ? 'bg-slate-200 text-slate-450 border border-slate-300 cursor-not-allowed'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                    }`}
+                    className="flex-1 py-2 text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer text-center bg-indigo-600 hover:bg-indigo-700 text-white"
                     id="btn-worker-submit"
                   >
                     {editingWorker ? '保存する' : '登録する'}
