@@ -242,7 +242,7 @@ export default function App() {
   const handleAddWorker = (newWorker: Omit<Worker, 'id' | 'createdAt'>) => {
     const worker: Worker = {
       ...newWorker,
-      id: `worker-${Date.now()}`,
+      id: `worker-${crypto.randomUUID()}`,
       createdAt: new Date().toISOString(),
     };
     const updated = [...workers, worker];
@@ -260,7 +260,7 @@ export default function App() {
   const handleAddJob = (newJob: Omit<Job, 'id' | 'createdAt'>) => {
     const job: Job = {
       ...newJob,
-      id: `job-${Date.now()}`,
+      id: `job-${crypto.randomUUID()}`,
       createdAt: new Date().toISOString(),
     };
     const updated = [...jobs, job];
@@ -278,7 +278,7 @@ export default function App() {
   const handleAddWorkLog = (newLog: Omit<WorkLog, 'id' | 'isPaid' | 'paymentId' | 'createdAt'>) => {
     const log: WorkLog = {
       ...newLog,
-      id: `log-${Date.now()}`,
+      id: `log-${crypto.randomUUID()}`,
       isPaid: false,
       paymentId: null,
       createdAt: new Date().toISOString(),

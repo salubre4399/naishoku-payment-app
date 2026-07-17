@@ -536,7 +536,7 @@ export default function DeveloperManager({ onDataReset, onSettingsChange, onDevA
               <input
                 type="text"
                 required
-                placeholder="例) admin"
+                placeholder="開発者ユーザー名を入力"
                 value={devUser}
                 onChange={(e) => setDevUser(e.target.value)}
                 className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-slate-800 font-bold"
@@ -575,7 +575,7 @@ export default function DeveloperManager({ onDataReset, onSettingsChange, onDevA
           </form>
 
           <div className="text-center pt-3 border-t border-slate-100 text-[10px] text-slate-450 font-medium">
-            ※ デフォルト開発者ユーザー名: <span className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-650">admin</span> / パスワード: <span className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-650">developer</span>
+            ※ 開発者ユーザー名・パスワードはシステム管理者のみが保持しています。
           </div>
         </div>
       </div>

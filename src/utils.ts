@@ -4,7 +4,6 @@
  */
 
 import { Worker, Job, WorkLog, MonthlyPayment, AppSettings } from './types';
-import { INITIAL_WORKERS, INITIAL_JOBS, INITIAL_WORK_LOGS, INITIAL_PAYMENTS } from './mockData';
 
 // Storage keys
 const KEYS = {
@@ -59,11 +58,12 @@ export const saveSettings = (settings: AppSettings) => {
 // Local storage loaders & savers
 export const loadWorkers = (): Worker[] => {
   const data = localStorage.getItem(KEYS.WORKERS);
-  if (!data) {
-    localStorage.setItem(KEYS.WORKERS, JSON.stringify(INITIAL_WORKERS));
-    return INITIAL_WORKERS;
+  if (!data) return [];
+  try {
+    return JSON.parse(data);
+  } catch {
+    return [];
   }
-  return JSON.parse(data);
 };
 
 export const saveWorkers = (workers: Worker[]) => {
@@ -72,11 +72,12 @@ export const saveWorkers = (workers: Worker[]) => {
 
 export const loadJobs = (): Job[] => {
   const data = localStorage.getItem(KEYS.JOBS);
-  if (!data) {
-    localStorage.setItem(KEYS.JOBS, JSON.stringify(INITIAL_JOBS));
-    return INITIAL_JOBS;
+  if (!data) return [];
+  try {
+    return JSON.parse(data);
+  } catch {
+    return [];
   }
-  return JSON.parse(data);
 };
 
 export const saveJobs = (jobs: Job[]) => {
@@ -85,11 +86,12 @@ export const saveJobs = (jobs: Job[]) => {
 
 export const loadWorkLogs = (): WorkLog[] => {
   const data = localStorage.getItem(KEYS.WORK_LOGS);
-  if (!data) {
-    localStorage.setItem(KEYS.WORK_LOGS, JSON.stringify(INITIAL_WORK_LOGS));
-    return INITIAL_WORK_LOGS;
+  if (!data) return [];
+  try {
+    return JSON.parse(data);
+  } catch {
+    return [];
   }
-  return JSON.parse(data);
 };
 
 export const saveWorkLogs = (logs: WorkLog[]) => {
@@ -98,11 +100,12 @@ export const saveWorkLogs = (logs: WorkLog[]) => {
 
 export const loadPayments = (): MonthlyPayment[] => {
   const data = localStorage.getItem(KEYS.PAYMENTS);
-  if (!data) {
-    localStorage.setItem(KEYS.PAYMENTS, JSON.stringify(INITIAL_PAYMENTS));
-    return INITIAL_PAYMENTS;
+  if (!data) return [];
+  try {
+    return JSON.parse(data);
+  } catch {
+    return [];
   }
-  return JSON.parse(data);
 };
 
 export const savePayments = (payments: MonthlyPayment[]) => {

@@ -88,7 +88,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                   name="username"
                   type="text"
                   required
-                  placeholder="例) staff"
+                  placeholder="ログインIDを入力"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 placeholder-slate-450 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
@@ -136,7 +136,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
           
           <div className="text-center pt-2 border-t border-slate-100">
             <span className="text-[10px] text-slate-400 font-medium">
-              ※ デフォルトID: <span className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-650">staff</span> / パスワード: <span className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-650">password</span>
+              ※ ログインID・パスワードは管理者にお問い合わせください。
             </span>
           </div>
         </div>
