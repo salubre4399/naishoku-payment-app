@@ -16,7 +16,7 @@ const KEYS = {
 
 const DEFAULT_SETTINGS: AppSettings = {
   hiddenTabs: [],
-  workerLimit: 99999,
+  workerLimit: 5, // 初期値はベーシックプラン（5名まで）。設定忘れによる無制限を防ぐ。
   appName: '内職報酬管理システム',
   appLogo: 'lock',
   accentColor: 'indigo',

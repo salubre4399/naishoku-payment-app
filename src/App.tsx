@@ -284,6 +284,15 @@ export default function App() {
 
   // --- Worker Actions ---
   const handleAddWorker = (newWorker: Omit<Worker, 'id' | 'createdAt'>) => {
+    // サブスク上限の最終防衛線：UIをすり抜けても保存層で必ず弾く。
+    const limit = Number(settings.workerLimit);
+    if (Number.isFinite(limit) && workers.length >= limit) {
+      alert(
+        `内職担当者の登録上限（${limit === 99999 ? '無制限' : `${limit}名`}）に達しているため、これ以上は登録できません。\n` +
+        `登録できる人数を増やすには、開発者設定でプラン上限を変更して「設定を反映」してください。`
+      );
+      return;
+    }
     const worker: Worker = {
       ...newWorker,
       id: `worker-${crypto.randomUUID()}`,
