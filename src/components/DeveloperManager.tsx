@@ -48,7 +48,11 @@ import {
 } from '../utils';
 import { AccessConfig, saveAccessConfig } from '../lib/access';
 import { COLLECTIONS, deleteItem, migrateArraysToCloud } from '../lib/store';
-import { Mail, Plus, X, CloudUpload } from 'lucide-react';
+import { Mail, Plus, X, CloudUpload, ExternalLink } from 'lucide-react';
+
+// Google Cloud OAuth同意画面（テストユーザー登録）へのリンク
+const OAUTH_TESTUSERS_URL =
+  'https://console.cloud.google.com/apis/credentials/consent?project=gen-lang-client-0874086404';
 
 interface DeveloperManagerProps {
   onSettingsChange?: () => void; // Notify main layout to dynamically update logos, names, active tabs
@@ -466,6 +470,24 @@ export default function DeveloperManager({
           <p className="text-[11px] text-slate-450 font-medium">
             このシステムにログインできるGoogleアカウントを管理します。ここで許可したメールアドレスのみがアプリを利用できます。
           </p>
+
+          {/* 重要な注意事項：2か所への登録が必要 */}
+          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-[10px] text-amber-800 font-bold leading-relaxed space-y-1.5">
+            <p className="flex items-start gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <span>新しい職員を追加するときは、必ず次の<span className="underline">2か所</span>にメールを登録してください（片方だけだとログイン時に「403 access_denied」になります）。</span>
+            </p>
+            <p className="pl-5">① この下のフォームで、許可アカウントに追加して保存</p>
+            <p className="pl-5">② Google Cloud の「OAuth同意画面 → テストユーザー」にも同じメールを追加</p>
+            <a
+              href={OAUTH_TESTUSERS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 mt-1 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors no-underline"
+            >
+              <ExternalLink className="w-3 h-3" /> ②テストユーザー設定を開く
+            </a>
+          </div>
 
           {/* メンバー追加 */}
           <div className="flex gap-2">
